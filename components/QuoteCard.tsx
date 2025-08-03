@@ -28,14 +28,38 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
 
   const handleFavoritePress = async () => {
     if (isToggling) return;
-    
+
     setIsToggling(true);
     try {
-      const wasAdded = await toggleFavorite(quote);
-      const message = wasAdded ? t('addedToFavorites') : t('removedFromFavorites');
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert('', message);
+      const result = await toggleFavorite(quote);
+
+      if (result.requiresLogin) {
+        // User is not logged in
+        if (Platform.OS !== 'web') {
+          Alert.alert(
+            t('loginRequiredForFavorites'),
+            t('loginRequiredMessage'),
+            [
+              {
+                text: t('cancelButton'),
+                style: 'cancel',
+              },
+              {
+                text: t('loginButton'),
+                onPress: () => {
+                  router.push('/auth/login');
+                },
+              },
+            ]
+          );
+        }
+      } else if (result.success) {
+        // Successfully added/removed favorite
+        const message = result.wasAdded ? t('addedToFavorites') : t('removedFromFavorites');
+
+        if (Platform.OS !== 'web') {
+          Alert.alert('', message);
+        }
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);

@@ -55,6 +55,10 @@ export const translations = {
     noFavoritesDescription: "Tap the heart icon on any quote to add it to your favorites.",
     addedToFavorites: "Added to favorites",
     removedFromFavorites: "Removed from favorites",
+    loginRequiredForFavorites: "Login Required",
+    loginRequiredMessage: "You need to be logged in to save favorites. Would you like to login now?",
+    loginButton: "Login",
+    cancelButton: "Cancel",
     
     // Profile Screen
     yourAccount: "Your Account",
@@ -184,6 +188,10 @@ export const translations = {
     noFavoritesDescription: "Tippen Sie auf das Herz-Symbol bei einem Zitat, um es zu Ihren Favoriten hinzuzufügen.",
     addedToFavorites: "Zu Favoriten hinzugefügt",
     removedFromFavorites: "Aus Favoriten entfernt",
+    loginRequiredForFavorites: "Anmeldung erforderlich",
+    loginRequiredMessage: "Sie müssen angemeldet sein, um Favoriten zu speichern. Möchten Sie sich jetzt anmelden?",
+    loginButton: "Anmelden",
+    cancelButton: "Abbrechen",
     
     // Profile Screen
     yourAccount: "Ihr Konto",

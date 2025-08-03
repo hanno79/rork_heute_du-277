@@ -344,14 +344,21 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     return favorites.some(fav => fav.id === quoteId);
   };
 
-  const toggleFavorite = async (quote: Quote) => {
+  const toggleFavorite = async (quote: Quote): Promise<{ success: boolean; wasAdded?: boolean; requiresLogin?: boolean }> => {
     console.log('Toggling favorite for quote:', quote.id);
+
+    // Check if user is authenticated
+    if (!isAuthenticated || !user) {
+      console.log('User not authenticated, cannot save favorites');
+      return { success: false, requiresLogin: true };
+    }
+
     if (isFavorite(quote.id)) {
       await removeFromFavorites(quote.id);
-      return false;
+      return { success: true, wasAdded: false };
     } else {
       await addToFavorites(quote);
-      return true;
+      return { success: true, wasAdded: true };
     }
   };
 

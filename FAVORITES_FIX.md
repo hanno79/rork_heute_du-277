@@ -237,6 +237,66 @@ useEffect(() => {
 - ✅ **Sprachwechsel**: Favoriten ändern sich sofort bei Sprachwechsel
 - ✅ **Konsistenz**: Favoriten-Sprache = App-Sprache
 
+## Update 3: Authentifizierungs-Check für Favoriten
+
+### ❌ Neues UX-Problem identifiziert:
+Nicht-eingeloggte Benutzer konnten auf das Favoriten-Icon klicken und bekamen die Meldung "Zu Favoriten hinzugefügt", obwohl nichts gespeichert wurde.
+
+### 🔍 Ursache:
+- `toggleFavorite()` Funktion prüfte nicht den Authentifizierungsstatus
+- Gab immer `true`/`false` zurück, auch bei nicht-eingeloggten Benutzern
+- QuoteCard zeigte irreführende Erfolgsmeldung
+
+### ✅ Lösung implementiert:
+1. **Erweiterte toggleFavorite() Rückgabe**:
+   ```typescript
+   // Neue Rückgabe-Struktur
+   Promise<{
+     success: boolean;
+     wasAdded?: boolean;
+     requiresLogin?: boolean
+   }>
+   ```
+
+2. **Authentifizierungs-Check**:
+   ```typescript
+   if (!isAuthenticated || !user) {
+     return { success: false, requiresLogin: true };
+   }
+   ```
+
+3. **Neue Benutzer-Dialoge**:
+   - **Nicht eingeloggt**: "Anmeldung erforderlich" Dialog mit Login-Button
+   - **Eingeloggt**: Normale Erfolgs-/Fehlermeldungen
+
+4. **Übersetzungen hinzugefügt**:
+   - `loginRequiredForFavorites`: "Anmeldung erforderlich"
+   - `loginRequiredMessage`: "Sie müssen angemeldet sein, um Favoriten zu speichern. Möchten Sie sich jetzt anmelden?"
+   - `loginButton`: "Anmelden"
+   - `cancelButton`: "Abbrechen"
+
+### 🔧 Code-Änderungen:
+- **hooks/useFavorites.ts**: Erweiterte toggleFavorite() mit Auth-Check
+- **components/QuoteCard.tsx**: Neue Dialog-Logik für Login-Aufforderung
+- **app/quote/[id].tsx**: Gleiche Dialog-Logik für Detail-Ansicht
+- **constants/translations.ts**: Neue Übersetzungen für Auth-Dialoge
+
+### 📱 Neues Verhalten:
+- **❌ Nicht eingeloggt + Favorit klicken**:
+  - Dialog: "Anmeldung erforderlich"
+  - Optionen: "Anmelden" (→ Login-Seite) oder "Abbrechen"
+  - **Keine irreführende Erfolgsmeldung mehr!**
+
+- **✅ Eingeloggt + Favorit klicken**:
+  - Normal: "Zu Favoriten hinzugefügt" / "Aus Favoriten entfernt"
+  - Funktioniert wie bisher
+
+### 🎯 Verbesserte UX:
+- ✅ **Ehrliche Kommunikation**: Keine falschen Erfolgsmeldungen
+- ✅ **Klare Handlungsaufforderung**: Direkter Link zum Login
+- ✅ **Benutzerfreundlich**: Einfacher Abbruch möglich
+- ✅ **Konsistent**: Gleiche Logik in QuoteCard und Detail-Ansicht
+
 ## Status
 ✅ **Problem gelöst**: Favoriten funktionieren jetzt vollständig mit Supabase
 ✅ **Datenbank-Schema**: Korrekt migriert
@@ -244,5 +304,8 @@ useEffect(() => {
 ✅ **Anzeige-Problem**: "Relevant for" Keywords werden korrekt angezeigt
 ✅ **Lokalisierung**: Favoriten werden in der richtigen Sprache angezeigt
 ✅ **Sprachwechsel**: Favoriten aktualisieren sich automatisch
+✅ **Authentifizierung**: Korrekte Behandlung nicht-eingeloggter Benutzer
+✅ **UX-Verbesserung**: Keine irreführenden Meldungen mehr
+✅ **Login-Integration**: Direkter Link zum Login bei Bedarf
 ✅ **Sicherheit**: RLS-Policies aktiv
 ✅ **Persistenz**: Daten überleben App-Neustarts
