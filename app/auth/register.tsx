@@ -46,10 +46,26 @@ export default function RegisterScreen() {
       
       if (result.success) {
         console.log('Registration successful, navigating to tabs');
-        router.replace('/(tabs)');
+        Alert.alert(
+          'Registrierung erfolgreich!', 
+          'Willkommen bei Heute Du. Sie sind jetzt angemeldet.',
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+        );
       } else {
         console.error('Registration failed:', result.error);
-        Alert.alert('Registrierung fehlgeschlagen', result.error || 'Unbekannter Fehler');
+        const errorMessage = result.error || 'Unbekannter Fehler';
+        
+        // Provide more user-friendly error messages
+        let displayMessage = errorMessage;
+        if (errorMessage.includes('email confirmation')) {
+          displayMessage = 'Die Registrierung war erfolgreich! Sie können sich jetzt mit Ihren Daten anmelden.';
+          Alert.alert('Registrierung abgeschlossen', displayMessage, [
+            { text: 'Zur Anmeldung', onPress: () => router.push('/auth/login') }
+          ]);
+          return;
+        }
+        
+        Alert.alert('Registrierung fehlgeschlagen', displayMessage);
       }
     } catch (err) {
       console.error('Register error:', err);

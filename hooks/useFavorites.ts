@@ -61,6 +61,10 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
 
         if (error) {
           console.error('Error loading favorites from Supabase:', error);
+          // If it's a UUID error, this user should use AsyncStorage
+          if (error.message?.includes('invalid input syntax for type uuid')) {
+            console.log('UUID error detected, switching to AsyncStorage for this user');
+          }
           // Fallback to AsyncStorage
           await loadFavoritesFromStorage();
         } else {
