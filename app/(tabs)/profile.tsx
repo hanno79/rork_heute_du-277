@@ -228,7 +228,14 @@ export default function ProfileScreen() {
               <Text style={styles.settingLabel}>{t('shareApp')}</Text>
             </View>
           </TouchableOpacity>
-          
+
+          <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/disclaimer')}>
+            <View style={styles.settingLeft}>
+              <BookOpen size={20} color={colors.text} style={styles.settingIcon} />
+              <Text style={styles.settingLabel}>{t('disclaimer')}</Text>
+            </View>
+          </TouchableOpacity>
+
           {isAuthenticated && (
             <TouchableOpacity style={styles.settingItem} onPress={handleLogout}>
               <View style={styles.settingLeft}>

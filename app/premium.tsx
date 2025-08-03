@@ -1,21 +1,82 @@
-import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { Crown, Check, X, ArrowLeft } from 'lucide-react-native';
+import { Crown, Check, X, ArrowLeft, Loader2 } from 'lucide-react-native';
 import colors from '@/constants/colors';
 
 import useSubscription from '@/hooks/useSubscription';
 import useLanguage from '@/hooks/useLanguage';
+import { useStripeService } from '@/services/stripeService';
+import { SUBSCRIPTION_PLANS, formatPrice } from '@/lib/stripe';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function PremiumScreen() {
   const { isPremium, setIsPremium } = useSubscription();
   const { t } = useLanguage();
+  const { user, isAuthenticated } = useAuth();
   const router = useRouter();
-  
-  const handleSubscribe = () => {
-    setIsPremium(true);
-    router.back();
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
+
+  // Initialize Stripe service
+  let stripeService: any = null;
+  try {
+    stripeService = useStripeService();
+  } catch (error) {
+    console.warn('Stripe not available:', error);
+  }
+
+  const handleSubscribe = async () => {
+    if (!isAuthenticated || !user) {
+      Alert.alert(
+        t('loginRequired'),
+        t('loginRequiredMessage'),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('login'), onPress: () => router.push('/auth/login') },
+        ]
+      );
+      return;
+    }
+
+    if (!stripeService) {
+      // Fallback for development/testing
+      setIsPremium(true);
+      Alert.alert(t('success'), t('subscriptionActivated'));
+      router.back();
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
+      if (!plan) {
+        throw new Error('Plan not found');
+      }
+
+      const result = await stripeService.handleSubscriptionWithPaymentSheet(
+        plan.priceId,
+        user.id
+      );
+
+      if (result.success) {
+        setIsPremium(true);
+        Alert.alert(
+          t('success'),
+          t('subscriptionActivated'),
+          [{ text: t('ok'), onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert(t('error'), result.error || t('paymentFailed'));
+      }
+    } catch (error) {
+      console.error('Subscription error:', error);
+      Alert.alert(t('error'), t('paymentFailed'));
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   return (
@@ -49,17 +110,47 @@ export default function PremiumScreen() {
         
         <View style={styles.pricingCard}>
           <Text style={styles.pricingTitle}>{t('premiumSubscription')}</Text>
-          <Text style={styles.price}>{t('monthlyPrice')} <Text style={styles.period}>{t('period')}</Text></Text>
-          <Text style={styles.priceSubtext}>{t('yearlyPrice')}</Text>
-          
-          <TouchableOpacity 
-            style={styles.subscribeButton} 
+
+          {/* Plan Selection */}
+          <View style={styles.planSelector}>
+            <TouchableOpacity
+              style={[styles.planOption, selectedPlan === 'monthly' && styles.planOptionSelected]}
+              onPress={() => setSelectedPlan('monthly')}
+            >
+              <Text style={[styles.planOptionText, selectedPlan === 'monthly' && styles.planOptionTextSelected]}>
+                {t('monthlyPlan')}
+              </Text>
+              <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>
+                {formatPrice(3.00)}/{t('month')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.planOption, selectedPlan === 'yearly' && styles.planOptionSelected]}
+              onPress={() => setSelectedPlan('yearly')}
+            >
+              <Text style={[styles.planOptionText, selectedPlan === 'yearly' && styles.planOptionTextSelected]}>
+                {t('yearlyPlan')}
+              </Text>
+              <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>
+                {formatPrice(30.00)}/{t('year')}
+              </Text>
+              <Text style={styles.savingsText}>{t('save')} 17%</Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.subscribeButton, (isPremium || isLoading) && styles.subscribeButtonDisabled]}
             onPress={handleSubscribe}
-            disabled={isPremium}
+            disabled={isPremium || isLoading}
           >
-            <Text style={styles.subscribeButtonText}>
-              {isPremium ? t('alreadySubscribed') : t('subscribeNow')}
-            </Text>
+            {isLoading ? (
+              <Loader2 size={20} color="white" style={styles.loadingIcon} />
+            ) : (
+              <Text style={styles.subscribeButtonText}>
+                {isPremium ? t('alreadySubscribed') : t('subscribeNow')}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
         
@@ -216,6 +307,44 @@ const styles = StyleSheet.create({
     color: colors.lightText,
     marginBottom: 20,
   },
+  planSelector: {
+    marginBottom: 20,
+    gap: 12,
+  },
+  planOption: {
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  planOptionSelected: {
+    borderColor: colors.premium,
+    backgroundColor: colors.premium + '10',
+  },
+  planOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  planOptionTextSelected: {
+    color: colors.premium,
+  },
+  planPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  planPriceSelected: {
+    color: colors.premium,
+  },
+  savingsText: {
+    fontSize: 12,
+    color: colors.premium,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   subscribeButton: {
     backgroundColor: colors.premium,
     borderRadius: 8,
@@ -223,11 +352,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     width: '100%',
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  subscribeButtonDisabled: {
+    backgroundColor: colors.lightText,
   },
   subscribeButtonText: {
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+  loadingIcon: {
+    marginRight: 8,
   },
   featuresContainer: {
     padding: 16,
