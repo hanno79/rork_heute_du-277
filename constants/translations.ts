@@ -13,8 +13,6 @@ export const translations = {
     todayQuote: "Today's Quote",
     context: "Context",
     explanation: "Explanation",
-    whenToApply: "When to Apply",
-    relevantFor: "This is particularly relevant when:",
     loadingQuote: "Loading today's quote...",
     
     // Search Screen
@@ -109,12 +107,9 @@ export const translations = {
     upgrade: "Upgrade",
     
     // Quote Detail
-    author: "Author",
     book: "Book",
-    relevantSituations: "Relevant Situations",
     tags: "Tags",
     quoteNotFound: "Quote not found",
-    type: "Type",
     
     // Quote Types
     bibleVerse: "Bible Verse",
@@ -124,7 +119,7 @@ export const translations = {
     
     // Common
     back: "Back",
-    relevantForLabel: "Relevant for:",
+    relevantSituations: "Relevant Situations",
     
     // Languages
     english: "English",
@@ -146,8 +141,6 @@ export const translations = {
     todayQuote: "Heutiges Zitat",
     context: "Kontext",
     explanation: "Erklärung",
-    whenToApply: "Wann anzuwenden",
-    relevantFor: "Dies ist besonders relevant wenn:",
     loadingQuote: "Lade heutiges Zitat...",
     
     // Search Screen
@@ -242,12 +235,9 @@ export const translations = {
     upgrade: "Upgraden",
     
     // Quote Detail
-    author: "Autor",
     book: "Buch",
-    relevantSituations: "Relevante Situationen",
     tags: "Schlagwörter",
     quoteNotFound: "Zitat nicht gefunden",
-    type: "Typ",
     
     // Quote Types
     bibleVerse: "Bibelvers",
@@ -257,7 +247,7 @@ export const translations = {
     
     // Common
     back: "Zurück",
-    relevantForLabel: "Relevant für:",
+    relevantSituations: "Relevante Situationen",
     
     // Languages
     english: "English",

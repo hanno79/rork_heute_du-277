@@ -153,19 +153,7 @@ Shared from ${t('appName')}`,
             {quote.author ? `— ${quote.author}` : quote.reference}
           </Text>
         </View>
-        
-        <View style={styles.section}>
-          <Text style={typography.subtitle}>{t('type')}</Text>
-          <Text style={typography.body}>{getTypeLabel(quote.type)}</Text>
-        </View>
-        
-        {quote.author && (
-          <View style={styles.section}>
-            <Text style={typography.subtitle}>{t('author')}</Text>
-            <Text style={typography.body}>{quote.author}</Text>
-          </View>
-        )}
-        
+
         {quote.book && (
           <View style={styles.section}>
             <Text style={typography.subtitle}>{t('book')}</Text>

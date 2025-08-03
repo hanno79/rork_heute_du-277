@@ -116,7 +116,7 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
       
       {!compact && (
         <View style={styles.situationsContainer}>
-          <Text style={typography.subtitle}>{t('relevantForLabel')}</Text>
+          <Text style={typography.subtitle}>{t('relevantSituations')}</Text>
           <View style={styles.tagsContainer}>
             {displaySituations.slice(0, 3).map((situation, index) => (
               <View key={index} style={styles.tag}>
