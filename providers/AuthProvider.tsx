@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { apiClient, User, AuthTokens } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 interface AuthState {
   user: User | null;
@@ -131,6 +132,37 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
   const refreshAuth = async () => {
     try {
+      // First check Supabase session
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (session && !error) {
+        // Get user profile
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        const user: User = {
+          id: session.user.id,
+          email: session.user.email!,
+          name: profile?.name || session.user.email!,
+          isPremium: profile?.is_premium || false,
+          createdAt: session.user.created_at,
+          updatedAt: profile?.updated_at || session.user.created_at,
+        };
+
+        const tokens: AuthTokens = {
+          accessToken: session.access_token,
+          refreshToken: session.refresh_token,
+          expiresAt: session.expires_at! * 1000,
+        };
+
+        await saveAuthData(user, tokens);
+        return;
+      }
+
+      // Fallback to AsyncStorage for backward compatibility
       const storedData = await AsyncStorage.multiGet([STORAGE_KEYS.USER, STORAGE_KEYS.TOKENS]);
       const userData = storedData[0][1];
       const tokensData = storedData[1][1];
@@ -168,6 +200,43 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
   useEffect(() => {
     refreshAuth();
+
+    // Listen to Supabase auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Supabase auth state changed:', event, session?.user?.email);
+
+        if (event === 'SIGNED_IN' && session) {
+          // Get user profile
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email!,
+            name: profile?.name || session.user.email!,
+            isPremium: profile?.is_premium || false,
+            createdAt: session.user.created_at,
+            updatedAt: profile?.updated_at || session.user.created_at,
+          };
+
+          const tokens: AuthTokens = {
+            accessToken: session.access_token,
+            refreshToken: session.refresh_token,
+            expiresAt: session.expires_at! * 1000,
+          };
+
+          await saveAuthData(user, tokens);
+        } else if (event === 'SIGNED_OUT') {
+          await clearAuthData();
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const actions: AuthActions = {
