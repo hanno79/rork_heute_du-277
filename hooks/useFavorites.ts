@@ -5,6 +5,7 @@ import { Quote } from '@/mocks/quotes';
 import quotes from '@/mocks/quotes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import useLanguage from '@/hooks/useLanguage';
 
 const FAVORITES_KEY = 'favorites';
 const USE_SUPABASE = true;
@@ -20,13 +21,28 @@ const shouldUseSupabase = (user: any): boolean => {
   return USE_SUPABASE && user && isValidUUID(user.id);
 };
 
-// Helper function to get complete quote data from mocks
-const getCompleteQuoteData = (quoteId: string, basicQuoteData: any): Quote => {
+// Helper function to get complete quote data from mocks with localization
+const getCompleteQuoteData = (quoteId: string, basicQuoteData: any, currentLanguage: string): Quote => {
   // Try to find the complete quote in mocks first
   const mockQuote = quotes.find(q => q.id === quoteId);
 
   if (mockQuote) {
-    // Return the complete mock quote data
+    // Apply localization if available
+    const localizedQuote = mockQuote.translations?.[currentLanguage];
+
+    if (localizedQuote && currentLanguage !== 'en') {
+      // Return localized version
+      return {
+        ...mockQuote,
+        text: localizedQuote.text,
+        context: localizedQuote.context,
+        explanation: localizedQuote.explanation,
+        situations: localizedQuote.situations,
+        tags: localizedQuote.tags,
+      };
+    }
+
+    // Return the complete mock quote data (English or no translation available)
     return mockQuote;
   }
 
@@ -52,6 +68,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   const [favorites, setFavorites] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const { user, isAuthenticated } = useAuth();
+  const { currentLanguage } = useLanguage();
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -60,7 +77,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       setFavorites([]);
       setIsLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, currentLanguage]); // Reload when language changes
 
   const testSupabaseConnection = async () => {
     try {
@@ -128,9 +145,9 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
               return null;
             }
 
-            // Get complete quote data from mocks (includes situations, tags, etc.)
-            const completeQuote = getCompleteQuoteData(quote.id, quote);
-            console.log('Complete quote data for', quote.id, ':', completeQuote.situations, completeQuote.tags);
+            // Get complete quote data from mocks with localization
+            const completeQuote = getCompleteQuoteData(quote.id, quote, currentLanguage);
+            console.log('Complete localized quote data for', quote.id, 'in', currentLanguage, ':', completeQuote.situations, completeQuote.tags);
 
             return completeQuote;
           }).filter(Boolean) || [];
@@ -159,7 +176,13 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       if (stored) {
         const parsedFavorites = JSON.parse(stored);
         console.log('Loaded favorites from storage:', parsedFavorites.length);
-        setFavorites(parsedFavorites);
+
+        // Apply localization to stored favorites
+        const localizedFavorites = parsedFavorites.map((favorite: Quote) => {
+          return getCompleteQuoteData(favorite.id, favorite, currentLanguage);
+        });
+
+        setFavorites(localizedFavorites);
       } else {
         console.log('No favorites found in storage');
         setFavorites([]);

@@ -172,10 +172,77 @@ const completeQuote = getCompleteQuoteData(quote.id, quote);
 - ✅ **Context/Explanation**: Vollständige Informationen verfügbar
 - ✅ **Fallback**: Funktioniert auch für neue Quotes ohne Mock-Daten
 
+## Update 2: Lokalisierung der Favoriten
+
+### ❌ Neues Problem identifiziert:
+Favoriten wurden in der falschen Sprache angezeigt - immer auf Englisch, auch wenn die App-Sprache auf Deutsch gestellt war.
+
+### 🔍 Ursache:
+- Mock-Daten enthalten mehrsprachige Übersetzungen (English + German)
+- `getCompleteQuoteData()` Funktion ignorierte die aktuelle App-Sprache
+- Favoriten zeigten immer die englische Basis-Version
+
+### ✅ Lösung implementiert:
+1. **useLanguage Hook Integration**: Import in useFavorites.ts
+2. **Erweiterte getCompleteQuoteData()**:
+   - Nimmt `currentLanguage` Parameter entgegen
+   - Prüft auf verfügbare Übersetzungen
+   - Wendet deutsche Lokalisierung an wenn verfügbar
+3. **Automatische Neuladen**: Favoriten werden bei Sprachwechsel neu geladen
+4. **AsyncStorage Lokalisierung**: Auch gespeicherte Favoriten werden lokalisiert
+
+### 🔧 Code-Änderungen:
+```typescript
+// Erweiterte Lokalisierung
+const getCompleteQuoteData = (quoteId: string, basicQuoteData: any, currentLanguage: string): Quote => {
+  const mockQuote = quotes.find(q => q.id === quoteId);
+
+  if (mockQuote) {
+    const localizedQuote = mockQuote.translations?.[currentLanguage];
+
+    if (localizedQuote && currentLanguage !== 'en') {
+      return {
+        ...mockQuote,
+        text: localizedQuote.text,
+        context: localizedQuote.context,
+        explanation: localizedQuote.explanation,
+        situations: localizedQuote.situations,
+        tags: localizedQuote.tags,
+      };
+    }
+
+    return mockQuote; // English fallback
+  }
+
+  return createBasicQuote(basicQuoteData);
+};
+
+// Automatisches Neuladen bei Sprachwechsel
+useEffect(() => {
+  if (isAuthenticated && user) {
+    loadFavorites();
+  }
+}, [isAuthenticated, user, currentLanguage]);
+```
+
+### 🌐 Sprachunterstützung:
+- ✅ **Deutsch (de)**: Vollständige Übersetzungen für Text, Situationen, Tags
+- ✅ **Englisch (en)**: Basis-Sprache, immer verfügbar
+- ✅ **Fallback**: Unbekannte Sprachen zeigen englische Version
+- ✅ **Dynamischer Wechsel**: Favoriten aktualisieren sich bei Sprachwechsel
+
+### 🎯 Neue Ergebnisse:
+- ✅ **Deutsche Favoriten**: "Relevant for" auf Deutsch ("Ungerechtigkeit erleben", "mit Rache umgehen")
+- ✅ **Englische Favoriten**: "Relevant for" auf Englisch ("facing injustice", "dealing with revenge")
+- ✅ **Sprachwechsel**: Favoriten ändern sich sofort bei Sprachwechsel
+- ✅ **Konsistenz**: Favoriten-Sprache = App-Sprache
+
 ## Status
 ✅ **Problem gelöst**: Favoriten funktionieren jetzt vollständig mit Supabase
 ✅ **Datenbank-Schema**: Korrekt migriert
 ✅ **App-Funktionalität**: Alle Features funktional
 ✅ **Anzeige-Problem**: "Relevant for" Keywords werden korrekt angezeigt
+✅ **Lokalisierung**: Favoriten werden in der richtigen Sprache angezeigt
+✅ **Sprachwechsel**: Favoriten aktualisieren sich automatisch
 ✅ **Sicherheit**: RLS-Policies aktiv
 ✅ **Persistenz**: Daten überleben App-Neustarts
