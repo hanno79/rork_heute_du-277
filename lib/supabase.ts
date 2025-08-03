@@ -88,7 +88,7 @@ export interface Database {
       };
       quotes: {
         Row: {
-          id: string;
+          id: string; // TEXT field, not UUID
           text: string;
           author: string | null;
           source: string | null;
@@ -99,7 +99,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
-          id?: string;
+          id: string; // Required TEXT field
           text: string;
           author?: string | null;
           source?: string | null;
@@ -124,8 +124,8 @@ export interface Database {
       user_favorites: {
         Row: {
           id: string;
-          user_id: string;
-          quote_id: string;
+          user_id: string; // UUID for user
+          quote_id: string; // TEXT field matching quotes.id
           created_at: string;
         };
         Insert: {

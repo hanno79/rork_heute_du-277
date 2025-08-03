@@ -24,7 +24,7 @@ export interface Quote {
 
 const quotes: Quote[] = [
   {
-    id: '1',
+    id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     text: "An eye for an eye, a tooth for a tooth.",
     reference: "Exodus 21:24",
     book: "Exodus",
@@ -46,7 +46,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '2',
+    id: 'b2c3d4e5-f6g7-8901-bcde-f23456789012',
     text: "Love your neighbor as yourself.",
     reference: "Mark 12:31",
     book: "Mark",
@@ -68,7 +68,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '3',
+    id: 'c3d4e5f6-g7h8-9012-cdef-345678901234',
     text: "For I know the plans I have for you, declares the LORD, plans to prosper you and not to harm you, plans to give you hope and a future.",
     reference: "Jeremiah 29:11",
     book: "Jeremiah",
@@ -90,7 +90,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '4',
+    id: 'd4e5f6g7-h8i9-0123-def0-456789012345',
     text: "The only way to do great work is to love what you do.",
     reference: "Steve Jobs",
     author: "Steve Jobs",
@@ -110,7 +110,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '5',
+    id: 'e5f6g7h8-i9j0-1234-ef01-567890123456',
     text: "In the middle of difficulty lies opportunity.",
     reference: "Albert Einstein",
     author: "Albert Einstein",
@@ -130,7 +130,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '6',
+    id: 'f6g7h8i9-j0k1-2345-f012-678901234567',
     text: "Be yourself; everyone else is already taken.",
     reference: "Oscar Wilde",
     author: "Oscar Wilde",
@@ -150,7 +150,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '7',
+    id: 'g7h8i9j0-k1l2-3456-0123-789012345678',
     text: "What doesn't kill you makes you stronger.",
     reference: "Friedrich Nietzsche",
     author: "Friedrich Nietzsche",
@@ -170,7 +170,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '8',
+    id: 'h8i9j0k1-l2m3-4567-1234-890123456789',
     text: "The journey of a thousand miles begins with one step.",
     reference: "Lao Tzu",
     author: "Lao Tzu",
@@ -190,7 +190,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '9',
+    id: 'i9j0k1l2-m3n4-5678-2345-901234567890',
     text: "Cast all your anxiety on him because he cares for you.",
     reference: "1 Peter 5:7",
     book: "1 Peter",
@@ -212,7 +212,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '10',
+    id: 'j0k1l2m3-n4o5-6789-3456-012345678901',
     text: "Trust in the LORD with all your heart and lean not on your own understanding.",
     reference: "Proverbs 3:5",
     book: "Proverbs",
@@ -234,7 +234,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '11',
+    id: 'k1l2m3n4-o5p6-7890-4567-123456789012',
     text: "The best time to plant a tree was 20 years ago. The second best time is now.",
     reference: "Chinese Proverb",
     type: 'saying',
@@ -253,7 +253,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '12',
+    id: 'l2m3n4o5-p6q7-8901-5678-234567890123',
     text: "Happiness is not something ready made. It comes from your own actions.",
     reference: "Dalai Lama",
     author: "Dalai Lama",
@@ -273,7 +273,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '13',
+    id: 'm3n4o5p6-q7r8-9012-6789-345678901234',
     text: "Do not be anxious about anything, but in every situation, by prayer and petition, with thanksgiving, present your requests to God.",
     reference: "Philippians 4:6",
     book: "Philippians",
@@ -295,7 +295,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '14',
+    id: 'n4o5p6q7-r8s9-0123-789a-456789012345',
     text: "It is during our darkest moments that we must focus to see the light.",
     reference: "Aristotle",
     author: "Aristotle",
@@ -315,7 +315,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '15',
+    id: 'o5p6q7r8-s9t0-1234-89ab-567890123456',
     text: "Family is not an important thing. It's everything.",
     reference: "Michael J. Fox",
     author: "Michael J. Fox",
@@ -335,7 +335,7 @@ const quotes: Quote[] = [
     }
   },
   {
-    id: '16',
+    id: 'p6q7r8s9-t0u1-2345-9abc-678901234567',
     text: "The Lord is my shepherd; I shall not want.",
     reference: "Psalm 23:1",
     book: "Psalms",
