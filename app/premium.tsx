@@ -1,0 +1,308 @@
+import React from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter } from 'expo-router';
+import { Crown, Check, X, ArrowLeft } from 'lucide-react-native';
+import colors from '@/constants/colors';
+
+import useSubscription from '@/hooks/useSubscription';
+import useLanguage from '@/hooks/useLanguage';
+
+export default function PremiumScreen() {
+  const { isPremium, setIsPremium } = useSubscription();
+  const { t } = useLanguage();
+  const router = useRouter();
+  
+  const handleSubscribe = () => {
+    setIsPremium(true);
+    router.back();
+  };
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen 
+        options={{
+          title: t('premiumSubscription'),
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTitleStyle: {
+            color: colors.text,
+            fontWeight: '600',
+          },
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          ),
+        }} 
+      />
+      
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <Crown size={40} color={colors.premium} style={styles.icon} />
+          <Text style={styles.title}>{t('upgradeTitle')}</Text>
+          <Text style={styles.subtitle}>
+            {t('upgradeSubtitle')}
+          </Text>
+        </View>
+        
+        <View style={styles.pricingCard}>
+          <Text style={styles.pricingTitle}>{t('premiumSubscription')}</Text>
+          <Text style={styles.price}>{t('monthlyPrice')} <Text style={styles.period}>{t('period')}</Text></Text>
+          <Text style={styles.priceSubtext}>{t('yearlyPrice')}</Text>
+          
+          <TouchableOpacity 
+            style={styles.subscribeButton} 
+            onPress={handleSubscribe}
+            disabled={isPremium}
+          >
+            <Text style={styles.subscribeButtonText}>
+              {isPremium ? t('alreadySubscribed') : t('subscribeNow')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.featuresContainer}>
+          <Text style={styles.featuresTitle}>{t('premiumFeatures')}</Text>
+          
+          <View style={styles.featureItem}>
+            <View style={styles.featureIconContainer}>
+              <Check size={20} color="white" />
+            </View>
+            <View style={styles.featureTextContainer}>
+              <Text style={styles.featureTitle}>{t('situationBasedSearch')}</Text>
+              <Text style={styles.featureDescription}>
+                {t('situationBasedSearchDesc')}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.featureItem}>
+            <View style={styles.featureIconContainer}>
+              <Check size={20} color="white" />
+            </View>
+            <View style={styles.featureTextContainer}>
+              <Text style={styles.featureTitle}>{t('voiceInput')}</Text>
+              <Text style={styles.featureDescription}>
+                {t('voiceInputDesc')}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.featureItem}>
+            <View style={styles.featureIconContainer}>
+              <Check size={20} color="white" />
+            </View>
+            <View style={styles.featureTextContainer}>
+              <Text style={styles.featureTitle}>{t('completeQuoteLibrary')}</Text>
+              <Text style={styles.featureDescription}>
+                {t('completeQuoteLibraryDesc')}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.featureItem}>
+            <View style={styles.featureIconContainer}>
+              <Check size={20} color="white" />
+            </View>
+            <View style={styles.featureTextContainer}>
+              <Text style={styles.featureTitle}>{t('noAds')}</Text>
+              <Text style={styles.featureDescription}>
+                {t('noAdsDesc')}
+              </Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.freeContainer}>
+          <Text style={styles.freeTitle}>{t('freeVersionIncludes')}</Text>
+          
+          <View style={styles.freeItem}>
+            <View style={styles.freeIconContainer}>
+              <Check size={20} color="white" />
+            </View>
+            <Text style={styles.freeText}>{t('dailyQuoteWithExplanation')}</Text>
+          </View>
+          
+          <View style={styles.freeItem}>
+            <View style={styles.freeIconContainer}>
+              <X size={20} color="white" />
+            </View>
+            <Text style={styles.freeText}>{t('noSituationBasedSearch')}</Text>
+          </View>
+          
+          <View style={styles.freeItem}>
+            <View style={styles.freeIconContainer}>
+              <X size={20} color="white" />
+            </View>
+            <Text style={styles.freeText}>{t('noVoiceInput')}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            {t('subscriptionRenewal')}
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  backButton: {
+    padding: 8,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  header: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  icon: {
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: colors.lightText,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  pricingCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+    elevation: Platform.OS === 'android' ? 3 : 0,
+    shadowColor: Platform.OS === 'ios' ? '#000' : 'transparent',
+    shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 2 } : { width: 0, height: 0 },
+    shadowOpacity: Platform.OS === 'ios' ? 0.1 : 0,
+    shadowRadius: Platform.OS === 'ios' ? 4 : 0,
+  },
+  pricingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  price: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: colors.premium,
+    marginBottom: 4,
+  },
+  period: {
+    fontSize: 16,
+    fontWeight: 'normal',
+    color: colors.lightText,
+  },
+  priceSubtext: {
+    fontSize: 14,
+    color: colors.lightText,
+    marginBottom: 20,
+  },
+  subscribeButton: {
+    backgroundColor: colors.premium,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+    alignItems: 'center',
+  },
+  subscribeButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  featuresContainer: {
+    padding: 16,
+    marginBottom: 24,
+  },
+  featuresTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  featureIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  featureTextContainer: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: colors.lightText,
+  },
+  freeContainer: {
+    padding: 16,
+    marginBottom: 24,
+    backgroundColor: colors.card,
+    marginHorizontal: 16,
+    borderRadius: 12,
+  },
+  freeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  freeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  freeIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.lightText,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  freeText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  footer: {
+    padding: 16,
+    marginBottom: 24,
+  },
+  footerText: {
+    fontSize: 12,
+    color: colors.lightText,
+    textAlign: 'center',
+  },
+});
