@@ -3,15 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 import Constants from 'expo-constants';
 
-// Conditional import to avoid errors in Expo Go
-let Notifications: any = null;
-try {
-  if (Platform.OS !== 'web') {
-    Notifications = require('expo-notifications');
-  }
-} catch (error) {
-  console.log('expo-notifications not available:', error);
-}
+// Notifications are not supported in Expo Go SDK 53+
+// This hook provides web-only notifications and graceful fallbacks
+const Notifications = null;
 
 export interface NotificationSettings {
   enabled: boolean;
@@ -173,32 +167,13 @@ export default function useNotifications() {
       return;
     }
 
-    if (isExpoGo || !Notifications) {
-      setCapabilities({
-        canSchedule: false,
-        canReceive: false,
-        isExpoGo: true,
-        reason: 'Push notifications require a development build in Expo SDK 53+'
-      });
-      return;
-    }
-
-    // For development builds, check actual permissions
-    try {
-      const { status } = await Notifications.getPermissionsAsync();
-      setCapabilities({
-        canSchedule: true,
-        canReceive: status === 'granted',
-        isExpoGo: false,
-      });
-    } catch (error) {
-      setCapabilities({
-        canSchedule: false,
-        canReceive: false,
-        isExpoGo: false,
-        reason: 'Failed to check notification permissions'
-      });
-    }
+    // Native notifications are not supported in Expo Go SDK 53+
+    setCapabilities({
+      canSchedule: false,
+      canReceive: false,
+      isExpoGo: true,
+      reason: 'Push notifications require a development build in Expo SDK 53+. Currently only web notifications are supported.'
+    });
   };
 
   const setupNotificationHandler = () => {
@@ -207,23 +182,8 @@ export default function useNotifications() {
       return;
     }
     
-    if (capabilities.isExpoGo || !Notifications) {
-      return;
-    }
-    
-    try {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
-    } catch (error) {
-      console.warn('Failed to setup notification handler:', error);
-    }
+    // Native notifications not supported in Expo Go SDK 53+
+    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const loadSettings = async () => {
@@ -275,32 +235,8 @@ export default function useNotifications() {
       return false;
     }
     
-    if (capabilities.isExpoGo || !Notifications) {
-      return false;
-    }
-
-    try {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      
-      const granted = finalStatus === 'granted';
-      
-      // Update capabilities
-      setCapabilities(prev => ({
-        ...prev,
-        canReceive: granted
-      }));
-      
-      return granted;
-    } catch (error) {
-      console.warn('Failed to request notification permissions:', error);
-      return false;
-    }
+    // Native notifications not supported in Expo Go SDK 53+
+    return false;
   };
 
   const scheduleNotifications = async (notificationSettings: NotificationSettings) => {
@@ -309,57 +245,8 @@ export default function useNotifications() {
       return;
     }
     
-    if (capabilities.isExpoGo || !capabilities.canSchedule || !Notifications) {
-      console.log('Notifications not available:', capabilities.reason);
-      return;
-    }
-
-    try {
-      await cancelAllNotifications();
-      
-      const hasPermission = await requestPermissions();
-      if (!hasPermission) {
-        Alert.alert(
-          'Berechtigung erforderlich',
-          'Bitte erlauben Sie Benachrichtigungen in den Einstellungen, um tägliche Sprüche zu erhalten.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      const [hours, minutes] = notificationSettings.time.split(':').map(Number);
-      
-      for (const day of notificationSettings.days) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Heute Du.',
-            body: 'Ihr täglicher Spruch ist bereit! 🌟',
-            data: { type: 'daily_quote' },
-          },
-          trigger: {
-            weekday: day === 0 ? 1 : day + 1, // Expo uses 1-7 (Sunday = 1)
-            hour: hours,
-            minute: minutes,
-            repeats: true,
-          } as Notifications.CalendarTriggerInput,
-        });
-      }
-      
-      console.log('Notifications scheduled for days:', notificationSettings.days, 'at', notificationSettings.time);
-      
-      Alert.alert(
-        'Benachrichtigungen aktiviert',
-        `Tägliche Sprüche werden um ${notificationSettings.time} an den ausgewählten Tagen gesendet.`,
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      console.warn('Failed to schedule notifications:', error);
-      Alert.alert(
-        'Fehler',
-        'Benachrichtigungen konnten nicht eingerichtet werden. Versuchen Sie es später erneut.',
-        [{ text: 'OK' }]
-      );
-    }
+    // Native notifications not supported in Expo Go SDK 53+
+    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const cancelAllNotifications = async () => {
@@ -368,16 +255,8 @@ export default function useNotifications() {
       return;
     }
     
-    if (capabilities.isExpoGo || !Notifications) {
-      return;
-    }
-    
-    try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      console.log('All notifications cancelled');
-    } catch (error) {
-      console.warn('Failed to cancel notifications:', error);
-    }
+    // Native notifications not supported in Expo Go SDK 53+
+    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const updateSettings = async (newSettings: Partial<NotificationSettings>) => {
