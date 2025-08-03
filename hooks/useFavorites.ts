@@ -33,6 +33,22 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     }
   }, [isAuthenticated, user]);
 
+  const testSupabaseConnection = async () => {
+    try {
+      console.log('Testing Supabase connection...');
+      const { data, error } = await supabase.from('quotes').select('id').limit(1);
+      if (error) {
+        console.error('Supabase connection test failed:', error);
+        return false;
+      }
+      console.log('Supabase connection test successful, found quotes:', data?.length || 0);
+      return true;
+    } catch (error) {
+      console.error('Supabase connection test error:', error);
+      return false;
+    }
+  };
+
   const loadFavorites = async () => {
     if (!user || !isAuthenticated) {
       setIsLoading(false);
@@ -42,6 +58,14 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     try {
       if (shouldUseSupabase(user)) {
         console.log('Loading favorites from Supabase for UUID user:', user.id);
+        
+        // Test connection first
+        const connectionOk = await testSupabaseConnection();
+        if (!connectionOk) {
+          console.log('Supabase connection failed, falling back to AsyncStorage');
+          await loadFavoritesFromStorage();
+          return;
+        }
         const { data, error } = await supabase
           .from('user_favorites')
           .select(`
@@ -70,6 +94,10 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
         } else {
           const favoritesData = data?.map(fav => {
             const quote = fav.quotes as any;
+            if (!quote) {
+              console.warn('Quote data missing for favorite:', fav.id);
+              return null;
+            }
             return {
               id: quote.id,
               text: quote.text,
@@ -78,17 +106,17 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
               book: '',
               chapter: 0,
               verse: 0,
-              type: 'quote' as const,
+              type: (quote.category || 'quote') as 'bible' | 'quote' | 'saying' | 'poem',
               context: '',
               explanation: '',
               situations: [],
               tags: [],
               translations: {}
             } as Quote;
-          }) || [];
+          }).filter(Boolean) || [];
 
           console.log('Loaded favorites from Supabase:', favoritesData.length);
-          setFavorites(favoritesData);
+          setFavorites(favoritesData as Quote[]);
         }
       } else {
         console.log('Loading favorites from AsyncStorage for mock user:', user.id);
@@ -146,14 +174,15 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       try {
         console.log('Using Supabase for UUID user:', user.id);
         // First, ensure the quote exists in the quotes table
-        const { data: existingQuote } = await supabase
+        const { data: existingQuote, error: selectError } = await supabase
           .from('quotes')
           .select('id')
           .eq('id', quote.id)
           .single();
 
-        if (!existingQuote) {
-          // Insert the quote first
+        if (selectError && selectError.code === 'PGRST116') {
+          // Quote doesn't exist, insert it first
+          console.log('Quote not found in database, inserting:', quote.id);
           const { error: quoteError } = await supabase
             .from('quotes')
             .insert({
@@ -173,6 +202,26 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
             await saveFavoritesToStorage(newFavorites);
             return;
           }
+          console.log('Quote inserted successfully:', quote.id);
+        } else if (selectError) {
+          console.error('Error checking quote existence:', selectError);
+          // Fallback to local storage
+          const newFavorites = [...favorites, quote];
+          await saveFavoritesToStorage(newFavorites);
+          return;
+        }
+
+        // Check if already in favorites to avoid duplicates
+        const { data: existingFavorite } = await supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('quote_id', quote.id)
+          .single();
+
+        if (existingFavorite) {
+          console.log('Quote already in favorites:', quote.id);
+          return;
         }
 
         // Add to user favorites
@@ -189,8 +238,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           const newFavorites = [...favorites, quote];
           await saveFavoritesToStorage(newFavorites);
         } else {
+          console.log('Successfully added to favorites in Supabase:', quote.id);
           // Update local state
           setFavorites(prev => [...prev, quote]);
+          // Also reload favorites to ensure consistency
+          setTimeout(() => loadFavorites(), 500);
         }
       } catch (error) {
         console.error('Error adding to favorites:', error);
@@ -227,8 +279,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           const newFavorites = favorites.filter(fav => fav.id !== quoteId);
           await saveFavoritesToStorage(newFavorites);
         } else {
+          console.log('Successfully removed from favorites in Supabase:', quoteId);
           // Update local state
           setFavorites(prev => prev.filter(fav => fav.id !== quoteId));
+          // Also reload favorites to ensure consistency
+          setTimeout(() => loadFavorites(), 500);
         }
       } catch (error) {
         console.error('Error removing from favorites:', error);
@@ -264,5 +319,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     removeFromFavorites,
     isFavorite,
     toggleFavorite,
+    reloadFavorites: loadFavorites,
+    testSupabaseConnection,
   };
 });
