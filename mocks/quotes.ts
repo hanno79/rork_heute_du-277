@@ -11,6 +11,8 @@ export interface Quote {
   explanation: string;
   situations: string[];
   tags: string[];
+  reflectionQuestions?: string[];
+  practicalTips?: string[];
   translations: {
     [key: string]: {
       text: string;
@@ -18,6 +20,8 @@ export interface Quote {
       explanation: string;
       situations: string[];
       tags: string[];
+      reflectionQuestions?: string[];
+      practicalTips?: string[];
     };
   };
 }
@@ -35,13 +39,33 @@ const quotes: Quote[] = [
     explanation: "Contrary to popular belief, this verse was not encouraging revenge but limiting it. In ancient times, a minor offense might lead to a blood feud. This law ensured that punishment matched the crime - no more, no less.",
     situations: ["facing injustice", "dealing with revenge", "legal matters", "proportional response"],
     tags: ["justice", "law", "retribution"],
+    reflectionQuestions: [
+      "How can you respond to unfairness in a measured way?",
+      "What would proportional justice look like in your current situation?",
+      "How can you break cycles of escalating conflict?"
+    ],
+    practicalTips: [
+      "Take time to cool down before responding to perceived injustice",
+      "Consider the long-term consequences of your response",
+      "Seek mediation or neutral third-party help when possible"
+    ],
     translations: {
       de: {
         text: "Auge um Auge, Zahn um Zahn.",
         context: "Dieser Vers erscheint im Kontext des Gesetzes Moses, speziell in einem Abschnitt über Körperverletzungen. Er sollte die Vergeltung auf das Maß der Straftat begrenzen, anstatt Gewalt zu eskalieren.",
         explanation: "Entgegen der landläufigen Meinung ermutigte dieser Vers nicht zur Rache, sondern begrenzte sie. In der Antike konnte eine geringfügige Straftat zu einer Blutrache führen. Dieses Gesetz stellte sicher, dass die Strafe dem Verbrechen entsprach - nicht mehr, nicht weniger.",
         situations: ["Ungerechtigkeit erleben", "mit Rache umgehen", "rechtliche Angelegenheiten", "angemessene Reaktion"],
-        tags: ["Gerechtigkeit", "Gesetz", "Vergeltung"]
+        tags: ["Gerechtigkeit", "Gesetz", "Vergeltung"],
+        reflectionQuestions: [
+          "Wie kannst du auf Ungerechtigkeit besonnen reagieren?",
+          "Wie würde angemessene Gerechtigkeit in deiner aktuellen Situation aussehen?",
+          "Wie kannst du Spiralen eskalierender Konflikte durchbrechen?"
+        ],
+        practicalTips: [
+          "Nimm dir Zeit zum Abkühlen, bevor du auf wahrgenommene Ungerechtigkeit reagierst",
+          "Bedenke die langfristigen Folgen deiner Reaktion",
+          "Suche Vermittlung oder neutrale Drittpartei-Hilfe, wenn möglich"
+        ]
       }
     }
   },
@@ -57,13 +81,33 @@ const quotes: Quote[] = [
     explanation: "This verse calls us to treat others with the same care, respect, and consideration we would want for ourselves. It's a foundation for ethical behavior in Christianity.",
     situations: ["community conflicts", "helping others", "ethical dilemmas", "relationships"],
     tags: ["love", "relationships", "ethics", "commandment"],
+    reflectionQuestions: [
+      "How do you currently treat yourself, and how can you extend that same care to others?",
+      "What barriers prevent you from loving your neighbor as yourself?",
+      "In what specific ways can you show love to someone in your community today?"
+    ],
+    practicalTips: [
+      "Practice active listening when someone shares their problems with you",
+      "Offer help without expecting anything in return",
+      "Treat others with the patience you'd want when you're having a difficult day"
+    ],
     translations: {
       de: {
         text: "Liebe deinen Nächsten wie dich selbst.",
         context: "Jesus bezeichnete dies als das zweitgrößte Gebot, das nur dem Gebot folgt, Gott mit ganzem Herzen, ganzer Seele, ganzem Verstand und ganzer Kraft zu lieben.",
         explanation: "Dieser Vers ruft uns dazu auf, andere mit derselben Fürsorge, demselben Respekt und derselben Rücksichtnahme zu behandeln, die wir uns für uns selbst wünschen würden. Es ist eine Grundlage für ethisches Verhalten im Christentum.",
         situations: ["Gemeindekonflikte", "anderen helfen", "ethische Dilemmata", "Beziehungen"],
-        tags: ["Liebe", "Beziehungen", "Ethik", "Gebot"]
+        tags: ["Liebe", "Beziehungen", "Ethik", "Gebot"],
+        reflectionQuestions: [
+          "Wie behandelst du dich selbst derzeit, und wie kannst du dieselbe Fürsorge auf andere ausdehnen?",
+          "Welche Barrieren hindern dich daran, deinen Nächsten wie dich selbst zu lieben?",
+          "Auf welche konkreten Weisen kannst du heute jemandem in deiner Gemeinschaft Liebe zeigen?"
+        ],
+        practicalTips: [
+          "Übe aktives Zuhören, wenn jemand seine Probleme mit dir teilt",
+          "Biete Hilfe an, ohne etwas dafür zu erwarten",
+          "Behandle andere mit der Geduld, die du dir wünschst, wenn du einen schwierigen Tag hast"
+        ]
       }
     }
   },

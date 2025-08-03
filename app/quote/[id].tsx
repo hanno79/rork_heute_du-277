@@ -34,6 +34,8 @@ export default function QuoteDetailScreen() {
   const displayExplanation = localizedQuote?.explanation || quote.explanation;
   const displaySituations = localizedQuote?.situations || quote.situations;
   const displayTags = localizedQuote?.tags || quote.tags;
+  const displayReflectionQuestions = localizedQuote?.reflectionQuestions || quote.reflectionQuestions;
+  const displayPracticalTips = localizedQuote?.practicalTips || quote.practicalTips;
 
   const getTypeLabel = (type: string) => {
     switch (type) {
@@ -192,6 +194,35 @@ Shared from ${t('appName')}`,
             ))}
           </View>
         </View>
+
+        {displayReflectionQuestions && displayReflectionQuestions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={typography.subtitle}>{t('reflectionQuestions')}</Text>
+            {displayReflectionQuestions.map((question, index) => (
+              <View key={index} style={styles.questionItem}>
+                <Text style={styles.questionNumber}>{index + 1}.</Text>
+                <Text style={[typography.body, styles.questionText]}>{question}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {displayPracticalTips && displayPracticalTips.length > 0 && (
+          <View style={styles.section}>
+            <Text style={typography.subtitle}>{t('practicalApplication')}</Text>
+            {displayPracticalTips.map((tip, index) => (
+              <View key={index} style={styles.tipItem}>
+                <Text style={styles.tipBullet}>•</Text>
+                <Text style={[typography.body, styles.tipText]}>{tip}</Text>
+              </View>
+            ))}
+            <View style={styles.disclaimerContainer}>
+              <Text style={[typography.caption, styles.disclaimerText]}>
+                {t('disclaimerText')}
+              </Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -279,5 +310,52 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '500',
+  },
+  questionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  questionNumber: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    marginRight: 8,
+    marginTop: 2,
+  },
+  questionText: {
+    flex: 1,
+    lineHeight: 22,
+  },
+  tipItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  tipBullet: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    marginRight: 8,
+    marginTop: 2,
+  },
+  tipText: {
+    flex: 1,
+    lineHeight: 22,
+  },
+  disclaimerContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  disclaimerText: {
+    color: colors.lightText,
+    fontStyle: 'italic',
+    lineHeight: 18,
   },
 });
