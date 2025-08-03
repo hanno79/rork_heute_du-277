@@ -130,9 +130,52 @@ CREATE POLICY "Quotes are viewable by everyone" ON quotes
 -- Benutzer sehen nur ihre eigenen Favoriten
 ```
 
+## Update: Favoriten-Anzeige Problem behoben
+
+### ❌ Neues Problem identifiziert:
+Nach der ersten Lösung funktionierte das Speichern der Favoriten, aber beim Anzeigen fehlten die "Relevant for" Keywords (situations/tags).
+
+### 🔍 Ursache:
+- Supabase-Datenbank enthält nur Basis-Quote-Daten (id, text, author, source, category)
+- Mock-Daten enthalten vollständige Informationen (situations, tags, context, explanation)
+- useFavorites Hook lud nur die Basis-Daten aus Supabase
+
+### ✅ Lösung implementiert:
+1. **Mock-Daten Import**: `import quotes from '@/mocks/quotes'` hinzugefügt
+2. **Hilfsfunktion erstellt**: `getCompleteQuoteData()`
+   - Sucht zuerst in Mock-Daten nach vollständigen Quote-Informationen
+   - Fallback auf Basis-Daten aus Supabase
+3. **Favoriten-Laden erweitert**: Beim Laden aus Supabase werden Mock-Daten ergänzt
+
+### 🔧 Code-Änderungen:
+```typescript
+// Neue Hilfsfunktion
+const getCompleteQuoteData = (quoteId: string, basicQuoteData: any): Quote => {
+  const mockQuote = quotes.find(q => q.id === quoteId);
+
+  if (mockQuote) {
+    return mockQuote; // Vollständige Mock-Daten mit situations/tags
+  }
+
+  // Fallback für unbekannte Quotes
+  return createBasicQuote(basicQuoteData);
+};
+
+// Erweiterte Favoriten-Ladung
+const completeQuote = getCompleteQuoteData(quote.id, quote);
+```
+
+### 🎯 Ergebnis:
+- ✅ **Favoriten speichern**: Funktioniert mit Supabase
+- ✅ **Favoriten anzeigen**: Zeigt vollständige Daten mit "Relevant for" Keywords
+- ✅ **Situations/Tags**: Werden korrekt aus Mock-Daten geladen
+- ✅ **Context/Explanation**: Vollständige Informationen verfügbar
+- ✅ **Fallback**: Funktioniert auch für neue Quotes ohne Mock-Daten
+
 ## Status
 ✅ **Problem gelöst**: Favoriten funktionieren jetzt vollständig mit Supabase
 ✅ **Datenbank-Schema**: Korrekt migriert
 ✅ **App-Funktionalität**: Alle Features funktional
+✅ **Anzeige-Problem**: "Relevant for" Keywords werden korrekt angezeigt
 ✅ **Sicherheit**: RLS-Policies aktiv
 ✅ **Persistenz**: Daten überleben App-Neustarts

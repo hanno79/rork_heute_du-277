@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { Quote } from '@/mocks/quotes';
+import quotes from '@/mocks/quotes';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -17,6 +18,34 @@ const isValidUUID = (id: string): boolean => {
 // Helper function to determine if we should use Supabase for this user
 const shouldUseSupabase = (user: any): boolean => {
   return USE_SUPABASE && user && isValidUUID(user.id);
+};
+
+// Helper function to get complete quote data from mocks
+const getCompleteQuoteData = (quoteId: string, basicQuoteData: any): Quote => {
+  // Try to find the complete quote in mocks first
+  const mockQuote = quotes.find(q => q.id === quoteId);
+
+  if (mockQuote) {
+    // Return the complete mock quote data
+    return mockQuote;
+  }
+
+  // Fallback: create quote from basic Supabase data
+  return {
+    id: basicQuoteData.id,
+    text: basicQuoteData.text,
+    reference: basicQuoteData.source || '',
+    author: basicQuoteData.author || '',
+    book: '',
+    chapter: 0,
+    verse: 0,
+    type: (basicQuoteData.category || 'quote') as 'bible' | 'quote' | 'saying' | 'poem',
+    context: '',
+    explanation: '',
+    situations: [],
+    tags: [],
+    translations: {}
+  } as Quote;
 };
 
 export const [FavoritesProvider, useFavorites] = createContextHook(() => {
@@ -98,24 +127,15 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
               console.warn('Quote data missing for favorite:', fav.id);
               return null;
             }
-            return {
-              id: quote.id,
-              text: quote.text,
-              reference: quote.source || '',
-              author: quote.author || '',
-              book: '',
-              chapter: 0,
-              verse: 0,
-              type: (quote.category || 'quote') as 'bible' | 'quote' | 'saying' | 'poem',
-              context: '',
-              explanation: '',
-              situations: [],
-              tags: [],
-              translations: {}
-            } as Quote;
+
+            // Get complete quote data from mocks (includes situations, tags, etc.)
+            const completeQuote = getCompleteQuoteData(quote.id, quote);
+            console.log('Complete quote data for', quote.id, ':', completeQuote.situations, completeQuote.tags);
+
+            return completeQuote;
           }).filter(Boolean) || [];
 
-          console.log('Loaded favorites from Supabase:', favoritesData.length);
+          console.log('Loaded favorites from Supabase with complete data:', favoritesData.length);
           setFavorites(favoritesData as Quote[]);
         }
       } else {
