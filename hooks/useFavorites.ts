@@ -8,6 +8,17 @@ import { useAuth } from '@/providers/AuthProvider';
 const FAVORITES_KEY = 'favorites';
 const USE_SUPABASE = true;
 
+// Helper function to check if user ID is a valid UUID (Supabase user)
+const isValidUUID = (id: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+};
+
+// Helper function to determine if we should use Supabase for this user
+const shouldUseSupabase = (user: any): boolean => {
+  return USE_SUPABASE && user && isValidUUID(user.id);
+};
+
 export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   const [favorites, setFavorites] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -29,8 +40,8 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     }
 
     try {
-      if (USE_SUPABASE) {
-        console.log('Loading favorites from Supabase...');
+      if (shouldUseSupabase(user)) {
+        console.log('Loading favorites from Supabase for UUID user:', user.id);
         const { data, error } = await supabase
           .from('user_favorites')
           .select(`
@@ -67,6 +78,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           setFavorites(favoritesData);
         }
       } else {
+        console.log('Loading favorites from AsyncStorage for mock user:', user.id);
         await loadFavoritesFromStorage();
       }
     } catch (error) {
@@ -80,23 +92,29 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   const loadFavoritesFromStorage = async () => {
     try {
       console.log('Loading favorites from AsyncStorage...');
-      const stored = await AsyncStorage.getItem(FAVORITES_KEY);
+      // Use user-specific key for mock users
+      const storageKey = user ? `${FAVORITES_KEY}_${user.id}` : FAVORITES_KEY;
+      const stored = await AsyncStorage.getItem(storageKey);
       if (stored) {
         const parsedFavorites = JSON.parse(stored);
-        console.log('Loaded favorites:', parsedFavorites.length);
+        console.log('Loaded favorites from storage:', parsedFavorites.length);
         setFavorites(parsedFavorites);
       } else {
         console.log('No favorites found in storage');
+        setFavorites([]);
       }
     } catch (error) {
       console.error('Error loading favorites from storage:', error);
+      setFavorites([]);
     }
   };
 
   const saveFavoritesToStorage = async (newFavorites: Quote[]) => {
     try {
       console.log('Saving favorites to AsyncStorage:', newFavorites.length);
-      await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
+      // Use user-specific key for mock users
+      const storageKey = user ? `${FAVORITES_KEY}_${user.id}` : FAVORITES_KEY;
+      await AsyncStorage.setItem(storageKey, JSON.stringify(newFavorites));
       setFavorites(newFavorites);
     } catch (error) {
       console.error('Error saving favorites:', error);
@@ -111,8 +129,9 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
 
     console.log('Adding quote to favorites:', quote.id);
 
-    if (USE_SUPABASE) {
+    if (shouldUseSupabase(user)) {
       try {
+        console.log('Using Supabase for UUID user:', user.id);
         // First, ensure the quote exists in the quotes table
         const { data: existingQuote } = await supabase
           .from('quotes')
@@ -166,6 +185,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
+      console.log('Using AsyncStorage for mock user:', user.id);
       const newFavorites = [...favorites, quote];
       await saveFavoritesToStorage(newFavorites);
     }
@@ -179,8 +199,9 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
 
     console.log('Removing quote from favorites:', quoteId);
 
-    if (USE_SUPABASE) {
+    if (shouldUseSupabase(user)) {
       try {
+        console.log('Using Supabase for UUID user:', user.id);
         const { error } = await supabase
           .from('user_favorites')
           .delete()
@@ -202,6 +223,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
+      console.log('Using AsyncStorage for mock user:', user.id);
       const newFavorites = favorites.filter(fav => fav.id !== quoteId);
       await saveFavoritesToStorage(newFavorites);
     }

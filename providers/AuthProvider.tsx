@@ -79,6 +79,16 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       setAuthState(prev => ({ ...prev, isLoading: true }));
       console.log('Starting login for:', email);
       
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
+        };
+      }
+      
       // Try Supabase first
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -203,6 +213,16 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
       console.log('Starting registration for:', email);
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
+        };
+      }
       
       // Try Supabase first
       try {
