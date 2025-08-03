@@ -68,15 +68,24 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           // Fallback to AsyncStorage
           await loadFavoritesFromStorage();
         } else {
-          const favoritesData = data?.map(fav => ({
-            id: fav.quotes.id,
-            text: fav.quotes.text,
-            author: fav.quotes.author || '',
-            source: fav.quotes.source || '',
-            category: fav.quotes.category || '',
-            language: fav.quotes.language,
-            isPremium: fav.quotes.is_premium,
-          })) || [];
+          const favoritesData = data?.map(fav => {
+            const quote = fav.quotes as any;
+            return {
+              id: quote.id,
+              text: quote.text,
+              reference: quote.source || '',
+              author: quote.author || '',
+              book: '',
+              chapter: 0,
+              verse: 0,
+              type: 'quote' as const,
+              context: '',
+              explanation: '',
+              situations: [],
+              tags: [],
+              translations: {}
+            } as Quote;
+          }) || [];
 
           console.log('Loaded favorites from Supabase:', favoritesData.length);
           setFavorites(favoritesData);
@@ -150,11 +159,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
             .insert({
               id: quote.id,
               text: quote.text,
-              author: quote.author,
-              source: quote.source,
-              category: quote.category,
-              language: quote.language || 'de',
-              is_premium: quote.isPremium || false,
+              author: quote.author || '',
+              source: quote.reference || '',
+              category: quote.type || 'quote',
+              language: 'de',
+              is_premium: false,
             });
 
           if (quoteError) {
