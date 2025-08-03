@@ -599,8 +599,28 @@ Make them diverse (try to include one Bible verse, one famous quote, and one say
   }, [searchResults, allSearchResults]);
 
   const getQuoteById = useCallback((id: string) => {
-    return quotes.find(quote => quote.id === id) || null;
-  }, []);
+    const allQuotes = [...quotes, ...dynamicQuotes];
+    const quote = allQuotes.find(quote => quote.id === id);
+
+    if (!quote) return null;
+
+    // Apply localization if available
+    const localizedQuote = quote.translations?.[currentLanguage];
+    if (localizedQuote && currentLanguage !== 'en') {
+      return {
+        ...quote,
+        text: localizedQuote.text,
+        context: localizedQuote.context,
+        explanation: localizedQuote.explanation,
+        situations: localizedQuote.situations,
+        tags: localizedQuote.tags,
+        reflectionQuestions: localizedQuote.reflectionQuestions || quote.reflectionQuestions,
+        practicalTips: localizedQuote.practicalTips || quote.practicalTips,
+      };
+    }
+
+    return quote;
+  }, [dynamicQuotes, currentLanguage]);
 
   return {
     quotes: [...quotes, ...dynamicQuotes],
