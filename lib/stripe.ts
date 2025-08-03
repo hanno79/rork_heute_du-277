@@ -1,4 +1,14 @@
-import { initStripe } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
+
+let initStripe: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const stripeModule = require('@stripe/stripe-react-native');
+    initStripe = stripeModule.initStripe;
+  } catch (error) {
+    console.warn('Stripe React Native not available:', error);
+  }
+}
 
 // Stripe configuration
 export const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
@@ -11,8 +21,18 @@ export const STRIPE_PRICE_IDS = {
 
 // Initialize Stripe
 export const initializeStripe = async () => {
+  if (Platform.OS === 'web') {
+    console.log('Stripe initialization skipped on web');
+    return false;
+  }
+
   if (!STRIPE_PUBLISHABLE_KEY) {
     console.warn('Stripe publishable key not found. Stripe functionality will be disabled.');
+    return false;
+  }
+
+  if (!initStripe) {
+    console.warn('Stripe React Native not available. Stripe functionality will be disabled.');
     return false;
   }
 

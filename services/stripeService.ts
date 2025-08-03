@@ -1,6 +1,16 @@
-import { useStripe } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { STRIPE_PRICE_IDS, SubscriptionPlan } from '@/lib/stripe';
+
+let useStripe: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const stripeModule = require('@stripe/stripe-react-native');
+    useStripe = stripeModule.useStripe;
+  } catch (error) {
+    console.warn('Stripe React Native not available:', error);
+  }
+}
 
 export interface PaymentResult {
   success: boolean;
@@ -160,6 +170,10 @@ export class StripeService {
 
 // Hook to use Stripe service
 export const useStripeService = () => {
+  if (Platform.OS === 'web' || !useStripe) {
+    throw new Error('Stripe not available on this platform');
+  }
+
   const stripe = useStripe();
 
   if (!stripe) {

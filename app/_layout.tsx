@@ -4,13 +4,26 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
-import { StripeProvider } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
 
 import colors from "@/constants/colors";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { AuthProvider } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { STRIPE_PUBLISHABLE_KEY } from "@/lib/stripe";
+
+let StripeProvider: any = null;
+let STRIPE_PUBLISHABLE_KEY = '';
+
+if (Platform.OS !== 'web') {
+  try {
+    const stripeModule = require('@stripe/stripe-react-native');
+    StripeProvider = stripeModule.StripeProvider;
+    const stripeConfig = require('@/lib/stripe');
+    STRIPE_PUBLISHABLE_KEY = stripeConfig.STRIPE_PUBLISHABLE_KEY;
+  } catch (error) {
+    console.warn('Stripe not available:', error);
+  }
+}
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -45,37 +58,45 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const AppContent = (
+    <AuthProvider>
+      <FavoritesProvider>
+        <StatusBar
+          style="dark"
+          backgroundColor={colors.background}
+        />
+        <Stack
+          screenOptions={{
+            headerBackTitle: "Back",
+            headerStyle: {
+              backgroundColor: colors.background,
+            },
+            headerTintColor: colors.text,
+            contentStyle: {
+              backgroundColor: colors.background,
+            },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="premium" options={{ presentation: "card" }} />
+          <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
+          <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
+          <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
+          <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
+        </Stack>
+      </FavoritesProvider>
+    </AuthProvider>
+  );
+
   return (
     <ErrorBoundary>
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-        <AuthProvider>
-          <FavoritesProvider>
-            <StatusBar
-              style="dark"
-              backgroundColor={colors.background}
-            />
-            <Stack
-              screenOptions={{
-                headerBackTitle: "Back",
-                headerStyle: {
-                  backgroundColor: colors.background,
-                },
-                headerTintColor: colors.text,
-                contentStyle: {
-                  backgroundColor: colors.background,
-                },
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="premium" options={{ presentation: "card" }} />
-              <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
-              <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
-              <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
-              <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
-            </Stack>
-          </FavoritesProvider>
-        </AuthProvider>
-      </StripeProvider>
+      {Platform.OS !== 'web' && StripeProvider ? (
+        <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+          {AppContent}
+        </StripeProvider>
+      ) : (
+        AppContent
+      )}
     </ErrorBoundary>
   );
 }
