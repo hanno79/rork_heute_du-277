@@ -78,15 +78,46 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
-      const response = await apiClient.login(email, password);
-      
-      if (response.success && response.data) {
-        await saveAuthData(response.data.user, response.data.tokens);
-        return { success: true };
-      } else {
+      // Use Supabase for login
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
         setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: response.error || 'Login failed' };
+        return { success: false, error: error.message };
       }
+
+      if (data.user && data.session) {
+        // Get user profile
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email!,
+          name: profile?.name || data.user.email!,
+          isPremium: profile?.is_premium || false,
+          createdAt: data.user.created_at,
+          updatedAt: profile?.updated_at || data.user.created_at,
+        };
+
+        const tokens: AuthTokens = {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at! * 1000,
+        };
+
+        await saveAuthData(user, tokens);
+        return { success: true };
+      }
+
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: false, error: 'Login failed' };
     } catch (error) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { 
@@ -100,15 +131,57 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
-      const response = await apiClient.register(email, password, name);
-      
-      if (response.success && response.data) {
-        await saveAuthData(response.data.user, response.data.tokens);
-        return { success: true };
-      } else {
+      // Use Supabase for registration
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
+      });
+
+      if (error) {
         setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: response.error || 'Registration failed' };
+        return { success: false, error: error.message };
       }
+
+      if (data.user && data.session) {
+        // Create user profile
+        const { error: profileError } = await supabase
+          .from('user_profiles')
+          .insert({
+            id: data.user.id,
+            name,
+            is_premium: false,
+          });
+
+        if (profileError) {
+          console.error('Failed to create user profile:', profileError);
+        }
+
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email!,
+          name,
+          isPremium: false,
+          createdAt: data.user.created_at,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const tokens: AuthTokens = {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          expiresAt: data.session.expires_at! * 1000,
+        };
+
+        await saveAuthData(user, tokens);
+        return { success: true };
+      }
+
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: false, error: 'Registration failed' };
     } catch (error) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { 
@@ -120,11 +193,9 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
   const logout = async () => {
     try {
-      if (authState.tokens) {
-        await apiClient.logout();
-      }
+      await supabase.auth.signOut();
     } catch (error) {
-      console.error('Logout API call failed:', error);
+      console.error('Logout failed:', error);
     } finally {
       await clearAuthData();
     }
@@ -136,30 +207,52 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (session && !error) {
-        // Get user profile
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+        try {
+          // Get user profile
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
 
-        const user: User = {
-          id: session.user.id,
-          email: session.user.email!,
-          name: profile?.name || session.user.email!,
-          isPremium: profile?.is_premium || false,
-          createdAt: session.user.created_at,
-          updatedAt: profile?.updated_at || session.user.created_at,
-        };
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email!,
+            name: profile?.name || session.user.email!,
+            isPremium: profile?.is_premium || false,
+            createdAt: session.user.created_at,
+            updatedAt: profile?.updated_at || session.user.created_at,
+          };
 
-        const tokens: AuthTokens = {
-          accessToken: session.access_token,
-          refreshToken: session.refresh_token,
-          expiresAt: session.expires_at! * 1000,
-        };
+          const tokens: AuthTokens = {
+            accessToken: session.access_token,
+            refreshToken: session.refresh_token,
+            expiresAt: session.expires_at! * 1000,
+          };
 
-        await saveAuthData(user, tokens);
-        return;
+          await saveAuthData(user, tokens);
+          return;
+        } catch (profileError) {
+          console.error('Error fetching user profile:', profileError);
+          // Continue with basic user data if profile fetch fails
+          const user: User = {
+            id: session.user.id,
+            email: session.user.email!,
+            name: session.user.email!,
+            isPremium: false,
+            createdAt: session.user.created_at,
+            updatedAt: session.user.created_at,
+          };
+
+          const tokens: AuthTokens = {
+            accessToken: session.access_token,
+            refreshToken: session.refresh_token,
+            expiresAt: session.expires_at! * 1000,
+          };
+
+          await saveAuthData(user, tokens);
+          return;
+        }
       }
 
       // Fallback to AsyncStorage for backward compatibility
@@ -194,7 +287,7 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       }
     } catch (error) {
       console.error('Failed to refresh auth:', error);
-      await clearAuthData();
+      setAuthState(prev => ({ ...prev, isLoading: false }));
     }
   };
 

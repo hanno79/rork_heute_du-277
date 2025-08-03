@@ -1,8 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+// Get environment variables with fallbacks
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://slrbnqvvomppzpvazvdu.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNscmJucXZ2b21wcHpwdmF6dmR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQyMjQwNzcsImV4cCI6MjA2OTgwMDA3N30.3V9ZeU978tS3XKHrmlD7UKHGdY4QLYyCMz1TwUsg5uo';
+
+if (!supabaseUrl || supabaseUrl === 'undefined') {
+  console.error('Missing EXPO_PUBLIC_SUPABASE_URL environment variable');
+}
+
+if (!supabaseAnonKey || supabaseAnonKey === 'undefined') {
+  console.error('Missing EXPO_PUBLIC_SUPABASE_ANON_KEY environment variable');
+}
 
 // Custom storage adapter for React Native
 const customStorage = {
