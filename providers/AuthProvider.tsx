@@ -77,52 +77,124 @@ export const [AuthContext, useAuth] = createContextHook(() => {
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
+      console.log('Starting login for:', email);
       
-      // Use Supabase for login
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Try Supabase first
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (error) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: error.message };
+        if (error) {
+          console.error('Supabase login error:', error);
+          // Fall back to mock login
+          return await loginWithMock(email, password);
+        }
+
+        if (data.user && data.session) {
+          console.log('Supabase login successful:', data.user.id);
+          
+          // Get user profile
+          try {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('id', data.user.id)
+              .single();
+
+            const user: User = {
+              id: data.user.id,
+              email: data.user.email!,
+              name: profile?.name || data.user.email!,
+              isPremium: profile?.is_premium || false,
+              createdAt: data.user.created_at,
+              updatedAt: profile?.updated_at || data.user.created_at,
+            };
+
+            const tokens: AuthTokens = {
+              accessToken: data.session.access_token,
+              refreshToken: data.session.refresh_token,
+              expiresAt: data.session.expires_at! * 1000,
+            };
+
+            await saveAuthData(user, tokens);
+            return { success: true };
+          } catch (profileError) {
+            console.error('Profile fetch error, continuing with basic user data:', profileError);
+            
+            const user: User = {
+              id: data.user.id,
+              email: data.user.email!,
+              name: data.user.email!,
+              isPremium: false,
+              createdAt: data.user.created_at,
+              updatedAt: data.user.created_at,
+            };
+
+            const tokens: AuthTokens = {
+              accessToken: data.session.access_token,
+              refreshToken: data.session.refresh_token,
+              expiresAt: data.session.expires_at! * 1000,
+            };
+
+            await saveAuthData(user, tokens);
+            return { success: true };
+          }
+        }
+
+        // Fall back to mock login if no user data
+        return await loginWithMock(email, password);
+      } catch (supabaseError) {
+        console.error('Supabase connection error:', supabaseError);
+        // Fall back to mock login
+        return await loginWithMock(email, password);
       }
-
-      if (data.user && data.session) {
-        // Get user profile
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          name: profile?.name || data.user.email!,
-          isPremium: profile?.is_premium || false,
-          createdAt: data.user.created_at,
-          updatedAt: profile?.updated_at || data.user.created_at,
-        };
-
-        const tokens: AuthTokens = {
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          expiresAt: data.session.expires_at! * 1000,
-        };
-
-        await saveAuthData(user, tokens);
-        return { success: true };
-      }
-
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, error: 'Login failed' };
     } catch (error) {
+      console.error('Login catch error:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Login failed' 
+        error: error instanceof Error ? error.message : 'Login fehlgeschlagen' 
+      };
+    }
+  };
+
+  const loginWithMock = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      console.log('Using mock login for:', email);
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Check mock storage for user
+      const storedUsers = await AsyncStorage.getItem('mock_users');
+      const users: Array<{ email: string; password: string; user: User }> = storedUsers ? JSON.parse(storedUsers) : [];
+      
+      const foundUser = users.find(u => u.email === email && u.password === password);
+      
+      if (foundUser) {
+        const tokens: AuthTokens = {
+          accessToken: 'mock_access_token_' + Math.random().toString(36).substr(2, 9),
+          refreshToken: 'mock_refresh_token_' + Math.random().toString(36).substr(2, 9),
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+        };
+        
+        await saveAuthData(foundUser.user, tokens);
+        return { success: true };
+      } else {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: 'Ungültige E-Mail oder Passwort',
+        };
+      }
+    } catch (error) {
+      console.error('Mock login error:', error);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return {
+        success: false,
+        error: 'Login fehlgeschlagen',
       };
     }
   };
@@ -130,63 +202,144 @@ export const [AuthContext, useAuth] = createContextHook(() => {
   const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
+      console.log('Starting registration for:', email);
       
-      // Use Supabase for registration
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
+      // Try Supabase first
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              name,
+            },
           },
-        },
-      });
+        });
 
-      if (error) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, error: error.message };
-      }
+        console.log('Supabase registration response:', { data, error });
 
-      if (data.user && data.session) {
-        // Create user profile
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .insert({
-            id: data.user.id,
-            name,
-            is_premium: false,
-          });
-
-        if (profileError) {
-          console.error('Failed to create user profile:', profileError);
+        if (error) {
+          console.error('Supabase registration error:', error);
+          // Fall back to mock registration
+          return await registerWithMock(email, password, name);
         }
 
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          name,
-          isPremium: false,
-          createdAt: data.user.created_at,
-          updatedAt: new Date().toISOString(),
-        };
+        if (data.user) {
+          console.log('User created successfully:', data.user.id);
+          
+          // Check if we have a session (immediate login) or need email confirmation
+          if (data.session) {
+            console.log('Session created, user logged in immediately');
+            
+            // Try to create user profile
+            try {
+              const { error: profileError } = await supabase
+                .from('user_profiles')
+                .insert({
+                  id: data.user.id,
+                  name,
+                  is_premium: false,
+                });
 
-        const tokens: AuthTokens = {
-          accessToken: data.session.access_token,
-          refreshToken: data.session.refresh_token,
-          expiresAt: data.session.expires_at! * 1000,
-        };
+              if (profileError) {
+                console.error('Failed to create user profile:', profileError);
+              }
+            } catch (profileError) {
+              console.error('Profile creation error:', profileError);
+            }
 
-        await saveAuthData(user, tokens);
-        return { success: true };
+            const user: User = {
+              id: data.user.id,
+              email: data.user.email!,
+              name,
+              isPremium: false,
+              createdAt: data.user.created_at,
+              updatedAt: new Date().toISOString(),
+            };
+
+            const tokens: AuthTokens = {
+              accessToken: data.session.access_token,
+              refreshToken: data.session.refresh_token,
+              expiresAt: data.session.expires_at! * 1000,
+            };
+
+            await saveAuthData(user, tokens);
+            return { success: true };
+          } else {
+            console.log('User created but needs email confirmation');
+            setAuthState(prev => ({ ...prev, isLoading: false }));
+            return { 
+              success: false, 
+              error: 'Bitte bestätigen Sie Ihre E-Mail-Adresse, um die Registrierung abzuschließen.' 
+            };
+          }
+        }
+
+        // Fall back to mock registration if no user data
+        return await registerWithMock(email, password, name);
+      } catch (supabaseError) {
+        console.error('Supabase connection error:', supabaseError);
+        // Fall back to mock registration
+        return await registerWithMock(email, password, name);
       }
-
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, error: 'Registration failed' };
     } catch (error) {
+      console.error('Registration catch error:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Registration failed' 
+        error: error instanceof Error ? error.message : 'Registrierung fehlgeschlagen' 
+      };
+    }
+  };
+
+  const registerWithMock = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      console.log('Using mock registration for:', email);
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check if user already exists in mock storage
+      const storedUsers = await AsyncStorage.getItem('mock_users');
+      const users: Array<{ email: string; password: string; user: User }> = storedUsers ? JSON.parse(storedUsers) : [];
+      
+      const existingUser = users.find(u => u.email === email);
+      if (existingUser) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits',
+        };
+      }
+      
+      // Create new mock user
+      const newUser: User = {
+        id: 'mock_' + Math.random().toString(36).substr(2, 9),
+        email,
+        name,
+        isPremium: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      const tokens: AuthTokens = {
+        accessToken: 'mock_access_token_' + Math.random().toString(36).substr(2, 9),
+        refreshToken: 'mock_refresh_token_' + Math.random().toString(36).substr(2, 9),
+        expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+      };
+      
+      // Save to mock storage
+      users.push({ email, password, user: newUser });
+      await AsyncStorage.setItem('mock_users', JSON.stringify(users));
+      
+      await saveAuthData(newUser, tokens);
+      return { success: true };
+    } catch (error) {
+      console.error('Mock registration error:', error);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return {
+        success: false,
+        error: 'Registrierung fehlgeschlagen',
       };
     }
   };

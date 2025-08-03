@@ -208,9 +208,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   };
 
   const isFavorite = (quoteId: string): boolean => {
-    const result = favorites.some(fav => fav.id === quoteId);
-    console.log(`Checking if quote ${quoteId} is favorite:`, result);
-    return result;
+    return favorites.some(fav => fav.id === quoteId);
   };
 
   const toggleFavorite = async (quote: Quote) => {
