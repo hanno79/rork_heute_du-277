@@ -11,19 +11,12 @@ import { FavoritesProvider } from "@/hooks/useFavorites";
 import { AuthProvider } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
+import { getStripeProvider, getStripeConfig } from '@/lib/stripe-wrapper';
+import React from "react";
+
+
 let StripeProvider: any = null;
 let STRIPE_PUBLISHABLE_KEY = '';
-
-if (Platform.OS !== 'web') {
-  try {
-    const stripeModule = require('@stripe/stripe-react-native');
-    StripeProvider = stripeModule.StripeProvider;
-    const stripeConfig = require('@/lib/stripe');
-    STRIPE_PUBLISHABLE_KEY = stripeConfig.STRIPE_PUBLISHABLE_KEY;
-  } catch (error) {
-    console.warn('Stripe not available:', error);
-  }
-}
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -58,6 +51,32 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const [stripeReady, setStripeReady] = useState(false);
+  const [stripeProvider, setStripeProvider] = useState<any>(null);
+  const [stripeKey, setStripeKey] = useState('');
+
+  useEffect(() => {
+    const initStripe = async () => {
+      if (Platform.OS !== 'web') {
+        try {
+          const provider = await getStripeProvider();
+          const config = await getStripeConfig();
+          setStripeProvider(provider);
+          setStripeKey(config.STRIPE_PUBLISHABLE_KEY);
+        } catch (error) {
+          console.warn('Failed to load Stripe:', error);
+        }
+      }
+      setStripeReady(true);
+    };
+    
+    initStripe();
+  }, []);
+
+  if (!stripeReady) {
+    return null;
+  }
+
   const AppContent = (
     <AuthProvider>
       <FavoritesProvider>
@@ -90,10 +109,8 @@ function RootLayoutNav() {
 
   return (
     <ErrorBoundary>
-      {Platform.OS !== 'web' && StripeProvider ? (
-        <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-          {AppContent}
-        </StripeProvider>
+      {Platform.OS !== 'web' && stripeProvider ? (
+        React.createElement(stripeProvider, { publishableKey: stripeKey }, AppContent)
       ) : (
         AppContent
       )}

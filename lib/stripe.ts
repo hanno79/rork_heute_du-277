@@ -1,15 +1,5 @@
 import { Platform } from 'react-native';
 
-let initStripe: any = null;
-if (Platform.OS !== 'web') {
-  try {
-    const stripeModule = require('@stripe/stripe-react-native');
-    initStripe = stripeModule.initStripe;
-  } catch (error) {
-    console.warn('Stripe React Native not available:', error);
-  }
-}
-
 // Stripe configuration
 export const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 
@@ -18,6 +8,19 @@ export const STRIPE_PRICE_IDS = {
   monthly: process.env.EXPO_PUBLIC_STRIPE_MONTHLY_PRICE_ID || 'price_monthly_3eur',
   yearly: process.env.EXPO_PUBLIC_STRIPE_YEARLY_PRICE_ID || 'price_yearly_30eur',
 };
+
+let initStripe: any = null;
+
+// Only load Stripe on native platforms
+if (Platform.OS !== 'web') {
+  try {
+    // Use dynamic import to prevent bundler from including Stripe on web
+    const stripeModule = eval('require("@stripe/stripe-react-native")');
+    initStripe = stripeModule.initStripe;
+  } catch (error) {
+    console.warn('Stripe React Native not available:', error);
+  }
+}
 
 // Initialize Stripe
 export const initializeStripe = async () => {

@@ -5,7 +5,8 @@ import { STRIPE_PRICE_IDS, SubscriptionPlan } from '@/lib/stripe';
 let useStripe: any = null;
 if (Platform.OS !== 'web') {
   try {
-    const stripeModule = require('@stripe/stripe-react-native');
+    // Use dynamic import to prevent bundler from including Stripe on web
+    const stripeModule = eval('require("@stripe/stripe-react-native")');
     useStripe = stripeModule.useStripe;
   } catch (error) {
     console.warn('Stripe React Native not available:', error);

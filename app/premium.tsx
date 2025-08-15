@@ -16,9 +16,10 @@ let formatPrice: any = null;
 
 if (Platform.OS !== 'web') {
   try {
-    const stripeService = require('@/services/stripeService');
+    // Use dynamic import to prevent bundler from including Stripe on web
+    const stripeService = eval('require("@/services/stripeService")');
     useStripeService = stripeService.useStripeService;
-    const stripeLib = require('@/lib/stripe');
+    const stripeLib = eval('require("@/lib/stripe")');
     SUBSCRIPTION_PLANS = stripeLib.SUBSCRIPTION_PLANS;
     formatPrice = stripeLib.formatPrice;
   } catch (error) {
