@@ -2,7 +2,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from 'react-native';
 
@@ -12,11 +12,6 @@ import { AuthProvider } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 import { getStripeProvider, getStripeConfig } from '@/lib/stripe-wrapper';
-import React from "react";
-
-
-let StripeProvider: any = null;
-let STRIPE_PUBLISHABLE_KEY = '';
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
