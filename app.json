@@ -20,7 +20,11 @@
         "UIBackgroundModes": [
           "audio"
         ],
-        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone"
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to access your microphone",
+        "CFBundleAllowMixedLocalizations": true,
+        "CFBundleLocalizations": [
+          "fr"
+        ]
       }
     },
     "android": {
@@ -68,6 +72,13 @@
         "expo-audio",
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
+        }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "string | string[]",
+          "enableGooglePay": "boolean"
         }
       ]
     ],
