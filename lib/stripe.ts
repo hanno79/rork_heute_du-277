@@ -1,4 +1,19 @@
-import { initStripe } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+// Conditionally import Stripe only for native platforms (but not Expo Go)
+let initStripe: any = null;
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    const stripeModule = require('@stripe/stripe-react-native');
+    initStripe = stripeModule.initStripe;
+  } catch (error) {
+    console.warn('Stripe not available on this platform:', error);
+  }
+}
 
 // Stripe configuration
 export const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
@@ -11,8 +26,18 @@ export const STRIPE_PRICE_IDS = {
 
 // Initialize Stripe
 export const initializeStripe = async () => {
+  if (Platform.OS === 'web' || isExpoGo) {
+    console.log('Stripe initialization skipped - running in Expo Go or Web');
+    return true; // Return true to indicate "success" on web/Expo Go
+  }
+
   if (!STRIPE_PUBLISHABLE_KEY) {
     console.warn('Stripe publishable key not found. Stripe functionality will be disabled.');
+    return false;
+  }
+
+  if (!initStripe) {
+    console.warn('Stripe module not available. Stripe functionality will be disabled.');
     return false;
   }
 

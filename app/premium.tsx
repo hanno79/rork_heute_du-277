@@ -3,13 +3,37 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Alert }
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Crown, Check, X, ArrowLeft, Loader2 } from 'lucide-react-native';
+import Constants from 'expo-constants';
 import colors from '@/constants/colors';
 
 import useSubscription from '@/hooks/useSubscription';
 import useLanguage from '@/hooks/useLanguage';
-import { useStripeService } from '@/services/stripeService';
-import { SUBSCRIPTION_PLANS, formatPrice } from '@/lib/stripe';
+import { useMockStripeService } from '@/services/mockStripeService';
+import { SUBSCRIPTION_PLANS, formatPrice, STRIPE_PUBLISHABLE_KEY } from '@/lib/stripe';
 import { useAuth } from '@/providers/AuthProvider';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+// Conditionally import Stripe services based on platform
+let useStripeService: any = null;
+let useStripeWebService: any = null;
+
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    const stripeServiceModule = require('@/services/stripeService');
+    useStripeService = stripeServiceModule.useStripeService;
+  } catch (error) {
+    console.warn('Stripe service not available:', error);
+  }
+} else if (Platform.OS === 'web') {
+  try {
+    const stripeWebServiceModule = require('@/services/stripeWebService');
+    useStripeWebService = stripeWebServiceModule.useStripeWebService;
+  } catch (error) {
+    console.warn('Stripe web service not available:', error);
+  }
+}
 
 export default function PremiumScreen() {
   const { isPremium, setIsPremium } = useSubscription();
@@ -21,10 +45,50 @@ export default function PremiumScreen() {
 
   // Initialize Stripe service
   let stripeService: any = null;
-  try {
-    stripeService = useStripeService();
-  } catch (error) {
-    console.warn('Stripe not available:', error);
+  let stripeWebService: any = null;
+  let stripeAvailable = false;
+  const mockStripeService = useMockStripeService();
+
+  // Check if Stripe is properly configured
+  const isStripeConfigured = STRIPE_PUBLISHABLE_KEY &&
+    STRIPE_PUBLISHABLE_KEY !== '' &&
+    !STRIPE_PUBLISHABLE_KEY.includes('placeholder') &&
+    !STRIPE_PUBLISHABLE_KEY.includes('test_51QYourTestKeyHere');
+
+  // Platform-specific Stripe initialization
+  if (Platform.OS !== 'web' && !isExpoGo) {
+    try {
+      if (isStripeConfigured && useStripeService) {
+        stripeService = useStripeService();
+        stripeAvailable = true;
+        console.log('Stripe service initialized successfully');
+      } else {
+        console.log('Using mock Stripe service for development');
+        stripeAvailable = false;
+      }
+    } catch (error) {
+      console.warn('Stripe not available, using mock service:', error);
+      stripeAvailable = false;
+    }
+  } else if (Platform.OS === 'web') {
+    // On web, use Stripe.js service
+    try {
+      if (isStripeConfigured && useStripeWebService) {
+        stripeWebService = useStripeWebService();
+        stripeAvailable = true;
+        console.log('Stripe web service initialized successfully');
+      } else {
+        console.log('Using mock Stripe service for web development');
+        stripeAvailable = false;
+      }
+    } catch (error) {
+      console.warn('Stripe web service not available, using mock service:', error);
+      stripeAvailable = false;
+    }
+  } else {
+    // In Expo Go, always use mock service
+    console.log('Using mock Stripe service in Expo Go');
+    stripeAvailable = false;
   }
 
   const handleSubscribe = async () => {
@@ -40,14 +104,6 @@ export default function PremiumScreen() {
       return;
     }
 
-    if (!stripeService) {
-      // Fallback for development/testing
-      setIsPremium(true);
-      Alert.alert(t('success'), t('subscriptionActivated'));
-      router.back();
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -56,10 +112,37 @@ export default function PremiumScreen() {
         throw new Error('Plan not found');
       }
 
-      const result = await stripeService.handleSubscriptionWithPaymentSheet(
-        plan.priceId,
-        user.id
-      );
+      let result;
+
+      if (stripeAvailable) {
+        if (Platform.OS !== 'web' && !isExpoGo && stripeService) {
+          // Use native Stripe service
+          result = await stripeService.handleSubscriptionWithPaymentSheet(
+            plan.priceId,
+            user.id
+          );
+        } else if (Platform.OS === 'web' && stripeWebService) {
+          // Use web Stripe service with Checkout
+          result = await stripeWebService.createCheckoutSession(
+            plan.priceId,
+            user.id
+          );
+        } else {
+          // Fallback to mock service
+          result = await mockStripeService.handleSubscriptionWithPaymentSheet(
+            plan.priceId,
+            user.id,
+            plan
+          );
+        }
+      } else {
+        // Use mock Stripe service for development/Expo Go
+        result = await mockStripeService.handleSubscriptionWithPaymentSheet(
+          plan.priceId,
+          user.id,
+          plan
+        );
+      }
 
       if (result.success) {
         setIsPremium(true);
@@ -110,6 +193,14 @@ export default function PremiumScreen() {
         
         <View style={styles.pricingCard}>
           <Text style={styles.pricingTitle}>{t('premiumSubscription')}</Text>
+
+          {!stripeAvailable && (
+            <View style={styles.developmentBanner}>
+              <Text style={styles.developmentText}>
+                🧪 Development Mode - Payment Simulation
+              </Text>
+            </View>
+          )}
 
           {/* Plan Selection */}
           <View style={styles.planSelector}>

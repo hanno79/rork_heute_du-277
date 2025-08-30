@@ -1,6 +1,21 @@
-import { useStripe } from '@stripe/stripe-react-native';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { STRIPE_PRICE_IDS, SubscriptionPlan } from '@/lib/stripe';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
+// Conditionally import Stripe hook only for native platforms (but not Expo Go)
+let useStripe: any = null;
+if (Platform.OS !== 'web' && !isExpoGo) {
+  try {
+    const stripeModule = require('@stripe/stripe-react-native');
+    useStripe = stripeModule.useStripe;
+  } catch (error) {
+    console.warn('Stripe not available on this platform:', error);
+  }
+}
 
 export interface PaymentResult {
   success: boolean;
@@ -160,6 +175,14 @@ export class StripeService {
 
 // Hook to use Stripe service
 export const useStripeService = () => {
+  if (Platform.OS === 'web' || isExpoGo) {
+    throw new Error('Stripe service not available on web platform or Expo Go. Use mock service instead.');
+  }
+
+  if (!useStripe) {
+    throw new Error('Stripe module not available on this platform.');
+  }
+
   const stripe = useStripe();
 
   if (!stripe) {
