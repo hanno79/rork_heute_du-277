@@ -2,16 +2,16 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { StatusBar } from "expo-status-bar";
-import { Platform } from 'react-native';
+
 
 import colors from "@/constants/colors";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { AuthProvider } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-import { getStripeProvider, getStripeConfig } from '@/lib/stripe-wrapper';
+
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -25,14 +25,14 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (error) {
       console.error(error);
       throw error;
     }
   }, [error]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
     }
@@ -46,69 +46,35 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const [stripeReady, setStripeReady] = useState(false);
-  const [stripeProvider, setStripeProvider] = useState<any>(null);
-  const [stripeKey, setStripeKey] = useState('');
-
-  useEffect(() => {
-    const initStripe = async () => {
-      if (Platform.OS !== 'web') {
-        try {
-          const provider = await getStripeProvider();
-          const config = await getStripeConfig();
-          setStripeProvider(provider);
-          setStripeKey(config.STRIPE_PUBLISHABLE_KEY);
-        } catch (error) {
-          console.warn('Failed to load Stripe:', error);
-        }
-      }
-      setStripeReady(true);
-    };
-    
-    initStripe();
-  }, []);
-
-  if (!stripeReady) {
-    return null;
-  }
-
-  const AppContent = (
-    <AuthProvider>
-      <FavoritesProvider>
-        <StatusBar
-          style="dark"
-          backgroundColor={colors.background}
-        />
-        <Stack
-          screenOptions={{
-            headerBackTitle: "Back",
-            headerStyle: {
-              backgroundColor: colors.background,
-            },
-            headerTintColor: colors.text,
-            contentStyle: {
-              backgroundColor: colors.background,
-            },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="premium" options={{ presentation: "card" }} />
-          <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
-          <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
-          <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
-          <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
-        </Stack>
-      </FavoritesProvider>
-    </AuthProvider>
-  );
-
   return (
     <ErrorBoundary>
-      {Platform.OS !== 'web' && stripeProvider ? (
-        React.createElement(stripeProvider, { publishableKey: stripeKey }, AppContent)
-      ) : (
-        AppContent
-      )}
+      <AuthProvider>
+        <FavoritesProvider>
+          <StatusBar
+            style="dark"
+            backgroundColor={colors.background}
+          />
+          <Stack
+            screenOptions={{
+              headerBackTitle: "Back",
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+              headerTintColor: colors.text,
+              contentStyle: {
+                backgroundColor: colors.background,
+              },
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="premium" options={{ presentation: "card" }} />
+            <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
+            <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
+            <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
+          </Stack>
+        </FavoritesProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

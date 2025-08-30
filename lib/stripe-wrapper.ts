@@ -7,9 +7,9 @@ export const getStripeProvider = async () => {
   }
   
   try {
-    // Use dynamic import to avoid bundling on web
-    const stripeNative = await import('@/lib/stripe-native');
-    return stripeNative.StripeProvider;
+    // Use require instead of import to avoid bundling issues
+    const { StripeProvider } = require('@stripe/stripe-react-native');
+    return StripeProvider;
   } catch (error) {
     console.warn('Stripe not available:', error);
     return null;
@@ -22,8 +22,8 @@ export const getStripeConfig = async () => {
   }
   
   try {
-    const stripeNative = await import('@/lib/stripe-native');
-    return { STRIPE_PUBLISHABLE_KEY: stripeNative.STRIPE_PUBLISHABLE_KEY };
+    const { STRIPE_PUBLISHABLE_KEY } = require('@/lib/stripe');
+    return { STRIPE_PUBLISHABLE_KEY };
   } catch (error) {
     console.warn('Stripe config not available:', error);
     return { STRIPE_PUBLISHABLE_KEY: '' };
