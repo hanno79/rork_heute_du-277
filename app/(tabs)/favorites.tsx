@@ -1,29 +1,19 @@
 import React from 'react';
 import { StyleSheet, View, Text, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
-import { Heart, RefreshCw } from 'lucide-react-native';
+import { Heart, LogIn } from 'lucide-react-native';
+import { router } from 'expo-router';
 import colors from '@/constants/colors';
 import typography from '@/constants/typography';
 import useLanguage from '@/hooks/useLanguage';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/providers/AuthProvider';
 import QuoteCard from '@/components/QuoteCard';
 import { Quote } from '@/mocks/quotes';
 
 export default function FavoritesScreen() {
   const { t } = useLanguage();
-  const { favorites, isLoading, reloadFavorites, testSupabaseConnection } = useFavorites();
-
-  const handleRefresh = async () => {
-    console.log('Manual refresh of favorites triggered');
-    await reloadFavorites();
-  };
-
-  const handleTestConnection = async () => {
-    console.log('Testing Supabase connection...');
-    const result = await testSupabaseConnection();
-    console.log('Connection test result:', result);
-  };
+  const { favorites, isLoading } = useFavorites();
+  const { isAuthenticated } = useAuth();
 
   const renderQuote = ({ item }: { item: Quote }) => (
     <QuoteCard quote={item} compact={false} />
@@ -34,55 +24,43 @@ export default function FavoritesScreen() {
       <Heart size={64} color={colors.lightText} />
       <Text style={styles.emptyTitle}>{t('noFavorites')}</Text>
       <Text style={styles.emptyDescription}>{t('noFavoritesDescription')}</Text>
-      <TouchableOpacity onPress={handleTestConnection} style={styles.testButton}>
-        <Text style={styles.testButtonText}>Test Supabase Connection</Text>
-      </TouchableOpacity>
     </View>
   );
 
+  // Show login prompt for non-authenticated users
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loginPromptContainer}>
+          <LogIn size={64} color={colors.lightText} />
+          <Text style={styles.loginTitle}>{t('loginRequired')}</Text>
+          <Text style={styles.loginDescription}>
+            {t('loginToSaveFavorites')}
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => router.push('/auth/login')}
+          >
+            <Text style={styles.loginButtonText}>{t('login')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Stack.Screen 
-          options={{
-            title: t('favorites'),
-            headerStyle: {
-              backgroundColor: colors.background,
-            },
-            headerTitleStyle: {
-              color: colors.text,
-              fontWeight: '600',
-            },
-            headerRight: () => (
-              <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
-                <RefreshCw size={20} color={colors.primary} />
-              </TouchableOpacity>
-            ),
-          }} 
-        />
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading favorites...</Text>
+          <Text style={styles.loadingText}>{t('loadingFavorites')}</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen 
-        options={{
-          title: t('favorites'),
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-          headerTitleStyle: {
-            color: colors.text,
-            fontWeight: '600',
-          },
-        }} 
-      />
-      
+    <View style={styles.container}>
       <FlatList
         data={favorites}
         renderItem={renderQuote}
@@ -91,7 +69,7 @@ export default function FavoritesScreen() {
         ListEmptyComponent={renderEmptyState}
         showsVerticalScrollIndicator={false}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -134,19 +112,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
-  refreshButton: {
-    padding: 8,
-    marginRight: 8,
+  loginPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
   },
-  testButton: {
+  loginTitle: {
+    ...typography.title,
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  loginDescription: {
+    ...typography.body,
+    color: colors.lightText,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  loginButton: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
     borderRadius: 8,
-    marginTop: 20,
   },
-  testButtonText: {
+  loginButtonText: {
     color: 'white',
     fontWeight: '600',
+    fontSize: 16,
   },
 });

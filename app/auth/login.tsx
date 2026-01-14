@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,31 +12,33 @@ import {
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import colors from '@/constants/colors';
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { login } = useAuth();
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Fehler', 'Bitte füllen Sie alle Felder aus.');
+      showAlert('Fehler', 'Bitte füllen Sie alle Felder aus.', [{ text: 'OK', onPress: () => {} }], '⚠️');
       return;
     }
 
     setIsLoading(true);
     try {
       const result = await login(email.trim(), password);
-      
+
       if (result.success) {
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Anmeldung fehlgeschlagen', result.error || 'Unbekannter Fehler');
+        showAlert('Anmeldung fehlgeschlagen', result.error || 'Unbekannter Fehler', [{ text: 'OK', onPress: () => {} }], '❌');
       }
     } catch (err) {
       console.error('Login error:', err);
-      Alert.alert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
+      showAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.', [{ text: 'OK', onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +111,8 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <AlertComponent />
     </KeyboardAvoidingView>
   );
 }

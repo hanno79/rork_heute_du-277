@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { Crown, Check, X, ArrowLeft, Loader2 } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import { SUBSCRIPTION_PLANS, formatPrice, STRIPE_PUBLISHABLE_KEY } from '@/lib/s
 import { useAuth } from '@/providers/AuthProvider';
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 // Check if running in Expo Go
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
@@ -46,14 +47,40 @@ export default function PremiumScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
 
-  // Convex mutation to update premium status
+  // Convex mutations
   const updatePremiumStatus = useMutation(api.auth.updatePremiumStatus);
+  const cancelSubscriptionMutation = useMutation(api.auth.cancelSubscription);
+  const reactivateSubscriptionMutation = useMutation(api.auth.reactivateSubscription);
 
   // Query user's actual premium status from Convex - THIS IS THE SOURCE OF TRUTH
   const userProfile = useQuery(
     api.auth.getCurrentUser,
     user?.id ? { userId: user.id } : "skip"
   );
+
+  // Cancellation loading state
+  const [isCanceling, setIsCanceling] = useState(false);
+
+  // Custom alert hook
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
+
+  // Payment confirmation dialog state
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentDialogConfig, setPaymentDialogConfig] = useState<{
+    planName: string;
+    price: number;
+    interval: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
+
+  // Cancellation confirmation dialog state
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelDialogConfig, setCancelDialogConfig] = useState<{
+    expiryDate: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null>(null);
 
   // Clear old cache and log status on mount
   React.useEffect(() => {
@@ -73,6 +100,20 @@ export default function PremiumScreen() {
 
   // Use Convex status as THE ONLY source of truth
   const actualIsPremium = userProfile?.isPremium === true;
+  const subscriptionStatus = userProfile?.stripeSubscriptionStatus;
+  const subscriptionCanceled = subscriptionStatus === 'canceled';
+  const premiumExpiresAt = userProfile?.premiumExpiresAt;
+  const subscriptionPlan = userProfile?.subscriptionPlan;
+
+  // Format expiry date for display
+  const formatExpiryDate = (timestamp: number | undefined) => {
+    if (!timestamp) return 'unbekannt';
+    return new Date(timestamp).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
 
   // Initialize Stripe service
   let stripeService: any = null;
@@ -122,109 +163,178 @@ export default function PremiumScreen() {
     stripeAvailable = false;
   }
 
+  // Process the payment result (used by both real Stripe and mock)
+  const processPaymentResult = async (result: any, plan: any) => {
+    console.log('Payment result:', result);
+
+    if (result.success) {
+      console.log('Payment successful, updating Convex...');
+      // Update premium status in Convex database
+      const expiresAt = Date.now() + (plan?.interval === 'year' ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
+
+      try {
+        console.log('Calling updatePremiumStatus with userId:', user!.id);
+        await updatePremiumStatus({
+          userId: user!.id,
+          isPremium: true,
+          stripeCustomerId: result.customerId,
+          stripeSubscriptionId: result.subscriptionId,
+          premiumExpiresAt: expiresAt,
+          stripeSubscriptionStatus: 'active',
+          subscriptionPlan: selectedPlan,
+        });
+        console.log('Convex update successful!');
+      } catch (convexError) {
+        console.error('Convex update FAILED:', convexError);
+      }
+
+      // Update local state
+      setIsPremium(true);
+
+      showAlert(
+        t('success'),
+        t('subscriptionActivated'),
+        [{ text: t('ok'), onPress: () => router.back() }],
+        '✅'
+      );
+    } else {
+      console.log('Payment failed or cancelled:', result.error);
+      if (result.error && result.error !== 'Zahlung abgebrochen') {
+        showAlert(t('error'), result.error || t('paymentFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
+      }
+    }
+    setIsLoading(false);
+  };
+
   const handleSubscribe = async () => {
     if (!isAuthenticated || !user) {
-      Alert.alert(
+      showAlert(
         t('loginRequired'),
         t('loginRequiredMessage'),
         [
-          { text: t('cancel'), style: 'cancel' },
+          { text: t('cancel'), style: 'cancel', onPress: () => {} },
           { text: t('login'), onPress: () => router.push('/auth/login') },
-        ]
+        ],
+        '🔐'
       );
       return;
     }
 
-    setIsLoading(true);
+    const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
+    if (!plan) {
+      showAlert(t('error'), 'Plan not found', [{ text: t('ok'), onPress: () => {} }], '❌');
+      return;
+    }
 
-    try {
-      const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
-      if (!plan) {
-        throw new Error('Plan not found');
-      }
+    console.log('=== PREMIUM PURCHASE DEBUG ===');
+    console.log('User ID:', user.id);
+    console.log('Plan:', plan);
+    console.log('Stripe Available:', stripeAvailable);
+    console.log('Is Expo Go:', isExpoGo);
 
-      console.log('=== PREMIUM PURCHASE DEBUG ===');
-      console.log('User ID:', user.id);
-      console.log('Plan:', plan);
-      console.log('Stripe Available:', stripeAvailable);
-      console.log('Is Expo Go:', isExpoGo);
-
-      let result;
-
-      if (stripeAvailable) {
+    if (stripeAvailable) {
+      // Use real Stripe service
+      setIsLoading(true);
+      try {
+        let result;
         if (Platform.OS !== 'web' && !isExpoGo && stripeService) {
-          // Use native Stripe service
-          result = await stripeService.handleSubscriptionWithPaymentSheet(
-            plan.priceId,
-            user.id
-          );
+          result = await stripeService.handleSubscriptionWithPaymentSheet(plan.priceId, user.id);
         } else if (Platform.OS === 'web' && stripeWebService) {
-          // Use web Stripe service with Checkout
-          result = await stripeWebService.createCheckoutSession(
-            plan.priceId,
-            user.id
-          );
-        } else {
-          // Fallback to mock service
-          result = await mockStripeService.handleSubscriptionWithPaymentSheet(
-            plan.priceId,
-            user.id,
-            plan
-          );
+          result = await stripeWebService.createCheckoutSession(plan.priceId, user.id);
         }
-      } else {
-        // Use mock Stripe service for development/Expo Go
-        console.log('Using MOCK Stripe service - should show Alert dialog');
-        result = await mockStripeService.handleSubscriptionWithPaymentSheet(
-          plan.priceId,
-          user.id,
-          plan
-        );
-        console.log('Mock service result:', result);
-      }
-
-      console.log('Payment result:', result);
-
-      if (result.success) {
-        console.log('Payment successful, updating Convex...');
-        // Update premium status in Convex database
-        const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
-        const expiresAt = Date.now() + (plan?.interval === 'year' ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
-
-        try {
-          console.log('Calling updatePremiumStatus with userId:', user.id);
-          await updatePremiumStatus({
-            userId: user.id,
-            isPremium: true,
-            stripeCustomerId: result.customerId,
-            stripeSubscriptionId: result.subscriptionId,
-            premiumExpiresAt: expiresAt,
-          });
-          console.log('Convex update successful!');
-        } catch (convexError) {
-          console.error('Convex update FAILED:', convexError);
+        if (result) {
+          await processPaymentResult(result, plan);
         }
-
-        // Update local state
-        setIsPremium(true);
-
-        Alert.alert(
-          t('success'),
-          t('subscriptionActivated'),
-          [{ text: t('ok'), onPress: () => router.back() }]
-        );
-      } else {
-        console.log('Payment failed or cancelled:', result.error);
-        Alert.alert(t('error'), result.error || t('paymentFailed'));
+      } catch (error) {
+        console.error('Subscription error:', error);
+        showAlert(t('error'), t('paymentFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Subscription error:', error);
-      Alert.alert(t('error'), t('paymentFailed'));
-    } finally {
-      setIsLoading(false);
+    } else {
+      // Use mock Stripe service - show custom dialog
+      console.log('Using MOCK Stripe service - showing custom dialog');
+      const config = mockStripeService.getPaymentConfirmationConfig(
+        plan.priceId,
+        user.id,
+        plan,
+        async (result) => {
+          setShowPaymentDialog(false);
+          setPaymentDialogConfig(null);
+          await processPaymentResult(result, plan);
+        }
+      );
+
+      setPaymentDialogConfig({
+        planName: config.plan.name,
+        price: config.plan.price,
+        interval: config.plan.interval,
+        onConfirm: () => {
+          setIsLoading(true);
+          config.onConfirm();
+        },
+        onCancel: config.onCancel,
+      });
+      setShowPaymentDialog(true);
     }
   };
-  
+
+  // Handle subscription cancellation
+  const handleCancelSubscription = () => {
+    if (!user) return;
+
+    // Get cancellation config from mock service
+    const config = mockStripeService.getCancellationConfirmationConfig(
+      userProfile?.stripeSubscriptionId || '',
+      premiumExpiresAt,
+      async (result) => {
+        setShowCancelDialog(false);
+        setCancelDialogConfig(null);
+
+        if (result.success) {
+          setIsCanceling(true);
+          try {
+            // Update Convex
+            await cancelSubscriptionMutation({ userId: user.id });
+            showAlert(
+              t('success'),
+              `Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`,
+              [{ text: t('ok'), onPress: () => {} }],
+              '✅'
+            );
+          } catch (error) {
+            console.error('Cancellation error:', error);
+            showAlert(t('error'), 'Kündigung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
+          } finally {
+            setIsCanceling(false);
+          }
+        }
+      }
+    );
+
+    setCancelDialogConfig({
+      expiryDate: config.expiryDate,
+      onConfirm: config.onConfirm,
+      onCancel: config.onCancel,
+    });
+    setShowCancelDialog(true);
+  };
+
+  // Handle subscription reactivation
+  const handleReactivateSubscription = async () => {
+    if (!user) return;
+
+    setIsCanceling(true);
+    try {
+      await reactivateSubscriptionMutation({ userId: user.id });
+      showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
+    } catch (error) {
+      console.error('Reactivation error:', error);
+      showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen 
@@ -257,13 +367,51 @@ export default function PremiumScreen() {
         <View style={styles.pricingCard}>
           <Text style={styles.pricingTitle}>{t('premiumSubscription')}</Text>
 
+          {/* Subscription Status Display */}
+          {actualIsPremium && (
+            <View style={styles.subscriptionStatusCard}>
+              <Text style={styles.subscriptionStatusTitle}>
+                {subscriptionCanceled ? '⏳ Abo gekündigt' : '✅ Premium aktiv'}
+              </Text>
+              <Text style={styles.subscriptionStatusText}>
+                Plan: {subscriptionPlan === 'yearly' ? 'Jährlich' : 'Monatlich'}
+              </Text>
+              <Text style={styles.subscriptionStatusText}>
+                {subscriptionCanceled
+                  ? `Zugang bis: ${formatExpiryDate(premiumExpiresAt)}`
+                  : `Nächste Zahlung: ${formatExpiryDate(premiumExpiresAt)}`}
+              </Text>
+
+              {/* Cancel or Reactivate Button */}
+              {subscriptionCanceled ? (
+                <TouchableOpacity
+                  style={styles.reactivateButton}
+                  onPress={handleReactivateSubscription}
+                  disabled={isCanceling}
+                >
+                  <Text style={styles.reactivateButtonText}>
+                    {isCanceling ? 'Wird reaktiviert...' : '🔄 Abo reaktivieren'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={handleCancelSubscription}
+                  disabled={isCanceling}
+                >
+                  <Text style={styles.cancelButtonText}>
+                    {isCanceling ? 'Wird gekündigt...' : '🚫 Abo kündigen'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Development Mode Banner */}
           {!stripeAvailable && (
             <View style={styles.developmentBanner}>
               <Text style={styles.developmentText}>
                 🧪 Development Mode
-              </Text>
-              <Text style={styles.developmentText}>
-                Status: {userProfile === undefined ? '⏳ Laden...' : (actualIsPremium ? '✅ Premium' : '❌ Kein Premium')}
               </Text>
               {!actualIsPremium && user?.id && (
                 <TouchableOpacity
@@ -276,12 +424,14 @@ export default function PremiumScreen() {
                         userId: user.id,
                         isPremium: true,
                         premiumExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+                        stripeSubscriptionStatus: 'active',
+                        subscriptionPlan: selectedPlan,
                       });
                       console.log('Premium activated successfully!');
-                      Alert.alert('Erfolg', 'Premium wurde aktiviert!');
+                      showAlert('Erfolg', 'Premium wurde aktiviert!', [{ text: 'OK', onPress: () => {} }], '🎉');
                     } catch (error) {
                       console.error('Failed to activate premium:', error);
-                      Alert.alert('Fehler', 'Premium konnte nicht aktiviert werden: ' + String(error));
+                      showAlert('Fehler', 'Premium konnte nicht aktiviert werden: ' + String(error), [{ text: 'OK', onPress: () => {} }], '❌');
                     }
                   }}
                 >
@@ -293,47 +443,51 @@ export default function PremiumScreen() {
             </View>
           )}
 
-          {/* Plan Selection */}
-          <View style={styles.planSelector}>
-            <TouchableOpacity
-              style={[styles.planOption, selectedPlan === 'monthly' && styles.planOptionSelected]}
-              onPress={() => setSelectedPlan('monthly')}
-            >
-              <Text style={[styles.planOptionText, selectedPlan === 'monthly' && styles.planOptionTextSelected]}>
-                {t('monthlyPlan')}
-              </Text>
-              <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>
-                {formatPrice(3.00)}/{t('month')}
-              </Text>
-            </TouchableOpacity>
+          {/* Plan Selection - only show when not premium */}
+          {!actualIsPremium && (
+            <>
+              <View style={styles.planSelector}>
+                <TouchableOpacity
+                  style={[styles.planOption, selectedPlan === 'monthly' && styles.planOptionSelected]}
+                  onPress={() => setSelectedPlan('monthly')}
+                >
+                  <Text style={[styles.planOptionText, selectedPlan === 'monthly' && styles.planOptionTextSelected]}>
+                    {t('monthlyPlan')}
+                  </Text>
+                  <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>
+                    {formatPrice(3.00)}/{t('month')}
+                  </Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.planOption, selectedPlan === 'yearly' && styles.planOptionSelected]}
-              onPress={() => setSelectedPlan('yearly')}
-            >
-              <Text style={[styles.planOptionText, selectedPlan === 'yearly' && styles.planOptionTextSelected]}>
-                {t('yearlyPlan')}
-              </Text>
-              <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>
-                {formatPrice(30.00)}/{t('year')}
-              </Text>
-              <Text style={styles.savingsText}>{t('save')} 17%</Text>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  style={[styles.planOption, selectedPlan === 'yearly' && styles.planOptionSelected]}
+                  onPress={() => setSelectedPlan('yearly')}
+                >
+                  <Text style={[styles.planOptionText, selectedPlan === 'yearly' && styles.planOptionTextSelected]}>
+                    {t('yearlyPlan')}
+                  </Text>
+                  <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>
+                    {formatPrice(30.00)}/{t('year')}
+                  </Text>
+                  <Text style={styles.savingsText}>{t('save')} 17%</Text>
+                </TouchableOpacity>
+              </View>
 
-          <TouchableOpacity
-            style={[styles.subscribeButton, (actualIsPremium || isLoading) && styles.subscribeButtonDisabled]}
-            onPress={handleSubscribe}
-            disabled={actualIsPremium || isLoading}
-          >
-            {isLoading ? (
-              <Loader2 size={20} color="white" style={styles.loadingIcon} />
-            ) : (
-              <Text style={styles.subscribeButtonText}>
-                {actualIsPremium ? t('alreadySubscribed') : t('subscribeNow')}
-              </Text>
-            )}
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.subscribeButton, isLoading && styles.subscribeButtonDisabled]}
+                onPress={handleSubscribe}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 size={20} color="white" style={styles.loadingIcon} />
+                ) : (
+                  <Text style={styles.subscribeButtonText}>
+                    {t('subscribeNow')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
         </View>
         
         <View style={styles.featuresContainer}>
@@ -419,6 +573,69 @@ export default function PremiumScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <AlertComponent />
+
+      {/* Payment Confirmation Dialog */}
+      {paymentDialogConfig && (
+        <CustomAlert
+          visible={showPaymentDialog}
+          title="💳 Zahlung bestätigen"
+          message={`Möchtest du das ${paymentDialogConfig.planName} Abo für ${paymentDialogConfig.price}€/${paymentDialogConfig.interval === 'year' ? 'Jahr' : 'Monat'} aktivieren?\n\n(Dies ist eine Test-Simulation)`}
+          icon="💳"
+          buttons={[
+            {
+              text: 'Abbrechen',
+              style: 'cancel',
+              onPress: () => {
+                paymentDialogConfig.onCancel();
+                setShowPaymentDialog(false);
+                setPaymentDialogConfig(null);
+              },
+            },
+            {
+              text: 'Bestätigen',
+              onPress: paymentDialogConfig.onConfirm,
+            },
+          ]}
+          onClose={() => {
+            paymentDialogConfig.onCancel();
+            setShowPaymentDialog(false);
+            setPaymentDialogConfig(null);
+          }}
+        />
+      )}
+
+      {/* Cancellation Confirmation Dialog */}
+      {cancelDialogConfig && (
+        <CustomAlert
+          visible={showCancelDialog}
+          title="🚫 Abo kündigen"
+          message={`Möchtest du dein Premium-Abo wirklich kündigen?\n\nDein Premium-Zugang bleibt bis zum ${cancelDialogConfig.expiryDate} aktiv.`}
+          icon="🚫"
+          buttons={[
+            {
+              text: 'Behalten',
+              style: 'cancel',
+              onPress: () => {
+                cancelDialogConfig.onCancel();
+                setShowCancelDialog(false);
+                setCancelDialogConfig(null);
+              },
+            },
+            {
+              text: 'Kündigen',
+              style: 'destructive',
+              onPress: cancelDialogConfig.onConfirm,
+            },
+          ]}
+          onClose={() => {
+            cancelDialogConfig.onCancel();
+            setShowCancelDialog(false);
+            setCancelDialogConfig(null);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -622,6 +839,70 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 12,
     color: colors.lightText,
+    textAlign: 'center',
+  },
+  // Subscription status styles
+  subscriptionStatusCard: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: colors.premium,
+  },
+  subscriptionStatusTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.premium,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subscriptionStatusText: {
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#FF6B6B',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#FF6B6B',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  reactivateButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  reactivateButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  // Development mode banner
+  developmentBanner: {
+    backgroundColor: '#FFF3CD',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  developmentText: {
+    fontSize: 12,
+    color: '#856404',
     textAlign: 'center',
   },
 });

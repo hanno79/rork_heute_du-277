@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Text, Platform, Alert } from 'react-native';
+import { StyleSheet, View, TextInput, TouchableOpacity, Text, Platform } from 'react-native';
 import { Search, Mic, MicOff } from 'lucide-react-native';
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import colors from '@/constants/colors';
 import useLanguage from '@/hooks/useLanguage';
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 interface SearchInputProps {
   onSearch: (query: string) => void;
@@ -18,6 +19,7 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const { t, currentLanguage } = useLanguage();
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -27,7 +29,7 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
 
   const handleVoiceInput = async () => {
     if (!isPremium) {
-      Alert.alert('Premium Feature', t('voiceInputPremium'));
+      showAlert('Premium Feature', t('voiceInputPremium'), [{ text: 'OK', onPress: () => {} }], '👑');
       return;
     }
 
@@ -78,7 +80,7 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         // Mobile implementation using expo-audio
         const status = await AudioModule.requestRecordingPermissionsAsync();
         if (!status.granted) {
-          Alert.alert('Permission Required', 'Microphone permission is required for voice input.');
+          showAlert('Berechtigung erforderlich', 'Mikrofonberechtigung wird für die Spracheingabe benötigt.', [{ text: 'OK', onPress: () => {} }], '🎤');
           setIsRecording(false);
           return;
         }
@@ -88,7 +90,7 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
       }
     } catch (error) {
       console.error('Error starting recording:', error);
-      Alert.alert('Error', 'Failed to start recording. Please try again.');
+      showAlert('Fehler', 'Aufnahme konnte nicht gestartet werden. Bitte versuchen Sie es erneut.', [{ text: 'OK', onPress: () => {} }], '❌');
       setIsRecording(false);
     }
   };
@@ -120,12 +122,12 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
           await transcribeAudio(audioFile);
         } else {
           console.error('No recording URI available');
-          Alert.alert('Fehler', 'Aufnahme konnte nicht gespeichert werden.');
+          showAlert('Fehler', 'Aufnahme konnte nicht gespeichert werden.', [{ text: 'OK', onPress: () => {} }], '❌');
         }
       }
     } catch (error) {
       console.error('Error stopping recording:', error);
-      Alert.alert('Error', 'Failed to process recording. Please try again.');
+      showAlert('Fehler', 'Aufnahme konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.', [{ text: 'OK', onPress: () => {} }], '❌');
       setIsTranscribing(false);
     }
   };
@@ -195,9 +197,11 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
       
       if (isSuspicious) {
         console.warn('Suspicious transcription result detected:', transcribedText);
-        Alert.alert(
-          'Aufnahme-Problem', 
-          'Die Spracherkennung hat ein unerwartetes Ergebnis geliefert. Bitte versuchen Sie es erneut und sprechen Sie deutlich.'
+        showAlert(
+          'Aufnahme-Problem',
+          'Die Spracherkennung hat ein unerwartetes Ergebnis geliefert. Bitte versuchen Sie es erneut und sprechen Sie deutlich.',
+          [{ text: 'OK', onPress: () => {} }],
+          '⚠️'
         );
         return;
       }
@@ -207,16 +211,20 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         setQuery(transcribedText);
         onSearch(transcribedText);
       } else {
-        Alert.alert(
-          'Keine Sprache erkannt', 
-          'Bitte sprechen Sie deutlicher und versuchen Sie es erneut.'
+        showAlert(
+          'Keine Sprache erkannt',
+          'Bitte sprechen Sie deutlicher und versuchen Sie es erneut.',
+          [{ text: 'OK', onPress: () => {} }],
+          '🎤'
         );
       }
     } catch (error) {
       console.error('Error transcribing audio:', error);
-      Alert.alert(
-        'Fehler bei der Spracherkennung', 
-        'Die Spracherkennung konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.'
+      showAlert(
+        'Fehler bei der Spracherkennung',
+        'Die Spracherkennung konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',
+        [{ text: 'OK', onPress: () => {} }],
+        '❌'
       );
     } finally {
       setIsTranscribing(false);
@@ -261,8 +269,8 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         )}
       </TouchableOpacity>
       
-      <TouchableOpacity 
-        style={[styles.searchButton, !isPremium && styles.disabledButton]} 
+      <TouchableOpacity
+        style={[styles.searchButton, !isPremium && styles.disabledButton]}
         onPress={handleSearch}
         disabled={!isPremium || query.length === 0}
       >
@@ -270,6 +278,7 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
           {t('searchButton')}
         </Text>
       </TouchableOpacity>
+      <AlertComponent />
     </View>
   );
 }

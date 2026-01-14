@@ -81,23 +81,37 @@ Respond with ONLY a valid JSON object (no markdown):
 
       const quoteData = JSON.parse(jsonStr);
 
-      // Save to database
-      const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, {
+      // Save to database - nur gültige Werte übergeben
+      const insertData: any = {
         text: quoteData.text,
-        author: quoteData.author || null,
-        reference: quoteData.reference,
         source: "ai_generated",
-        category: quoteData.type || "quote",
         language: args.language,
         isPremium: false,
-        context: quoteData.context,
-        explanation: quoteData.explanation,
         situations: quoteData.situations || [],
         tags: quoteData.tags || [],
         aiPrompt: args.searchQuery
           ? `Search: ${args.searchQuery}`
           : "Daily quote generation",
-      });
+      };
+
+      // Füge optionale Felder nur hinzu wenn sie einen Wert haben
+      if (quoteData.author && quoteData.author !== "null" && quoteData.author !== null) {
+        insertData.author = quoteData.author;
+      }
+      if (quoteData.reference) {
+        insertData.reference = quoteData.reference;
+      }
+      if (quoteData.type) {
+        insertData.category = quoteData.type;
+      }
+      if (quoteData.context) {
+        insertData.context = quoteData.context;
+      }
+      if (quoteData.explanation) {
+        insertData.explanation = quoteData.explanation;
+      }
+
+      const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, insertData);
 
       return { quoteId, quote: quoteData };
     } catch (error: any) {
@@ -107,12 +121,27 @@ Respond with ONLY a valid JSON object (no markdown):
   },
 });
 
-// Generate multiple quotes for search (Premium feature)
+// Helper: Normalize a search query for matching
+function normalizeQuery(query: string): string {
+  return query
+    .toLowerCase()
+    .replace(/[^\w\säöüß]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter((word) => word.length > 2)
+    .sort()
+    .join(" ");
+}
+
+// Generate multiple quotes for search (Premium feature) - with context saving
 export const generateSearchQuotes = action({
   args: {
     query: v.string(),
     language: v.string(),
     count: v.optional(v.number()),
+    userId: v.optional(v.string()),
+    categoryId: v.optional(v.id("searchCategories")),
   },
   handler: async (ctx, args) => {
     const openrouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -120,30 +149,37 @@ export const generateSearchQuotes = action({
       throw new Error("OPENROUTER_API_KEY not configured");
     }
 
+    // Check rate limit if userId provided
+    if (args.userId) {
+      const rateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+        userId: args.userId,
+      });
+      if (!rateLimit.canUseAI) {
+        throw new Error("AI_RATE_LIMIT_EXCEEDED");
+      }
+    }
+
     const count = args.count || 3;
     const langName = args.language === "de" ? "German" : "English";
 
-    const prompt = `Find ${count} meaningful and relevant quotes, Bible verses, or sayings for: "${args.query}"
+    const prompt = `Find ${count} meaningful quotes, Bible verses, or sayings for: "${args.query}"
 
-Requirements:
-- Language: ${langName}
-- Must be authentic (real quotes, actual Bible verses, or traditional sayings)
-- Include proper attribution
-- Diverse types (try: 1 Bible verse, 1 famous quote, 1 saying/proverb)
+Language: ${langName}
+Requirements: authentic quotes with proper attribution, diverse types
 
-Respond with ONLY a valid JSON array (no markdown):
+IMPORTANT: For EACH quote, also provide "relevantQueries" - 3-5 ALTERNATIVE search terms that this quote would also be a good match for. This helps users find the same quote through related searches.
+
+Example: If the query is "Liebeskummer" (heartbreak), a quote about healing might also be relevant for "Trennung" (breakup), "Herzschmerz" (heartache), "Loslassen" (letting go).
+
+IMPORTANT: Return ONLY valid JSON, no explanations before or after.
+
 [
-  {
-    "text": "The quote text",
-    "reference": "Author or Bible reference",
-    "author": "Author name (null for Bible)",
-    "type": "bible" | "quote" | "saying" | "poem",
-    "context": "Brief context (2 sentences)",
-    "explanation": "Why relevant to query (2 sentences)",
-    "situations": ["situation1", "situation2", "situation3"],
-    "tags": ["tag1", "tag2", "tag3"]
-  }
-]`;
+{"text":"Quote text here","reference":"Source","author":"Author or null","type":"quote","context":"Brief context","explanation":"Why relevant","situations":["situation1","situation2"],"tags":["tag1","tag2"],"relevanceScore":85,"relevantQueries":["alternative search 1","alternative search 2","alternative search 3"]}
+]
+
+Types: "bible", "quote", "saying", "poem"
+relevanceScore: 0-100 based on match quality
+relevantQueries: 3-5 alternative search terms in ${langName} that would also match this quote`;
 
     try {
       const response = await fetch(
@@ -160,7 +196,7 @@ Respond with ONLY a valid JSON array (no markdown):
             model: "anthropic/claude-3-haiku",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.7,
-            max_tokens: 2000,
+            max_tokens: 4000,
           }),
         }
       );
@@ -172,41 +208,221 @@ Respond with ONLY a valid JSON array (no markdown):
       const data = await response.json();
       let content = data.choices[0]?.message?.content || "";
 
-      // JSON extrahieren
+      // JSON extrahieren - robuste Methode
+      // Entferne Markdown code blocks
       if (content.includes("```")) {
         content = content
-          .replace(/```json?\n?/g, "")
-          .replace(/```$/g, "")
+          .replace(/```json?\s*/gi, "")
+          .replace(/```\s*/g, "")
           .trim();
       }
 
-      const quotesData = JSON.parse(content);
-      const quotes = Array.isArray(quotesData) ? quotesData : [quotesData];
+      // Finde das JSON Array im Content
+      const jsonStart = content.indexOf("[");
+      const jsonEnd = content.lastIndexOf("]");
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        content = content.substring(jsonStart, jsonEnd + 1);
+      }
 
-      // In DB speichern
+      // Entferne mögliche Trailing Kommas vor ] oder }
+      content = content
+        .replace(/,\s*]/g, "]")
+        .replace(/,\s*}/g, "}")
+        // Entferne Kommentare
+        .replace(/\/\/[^\n]*/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "");
+
+      let quotesData;
+      try {
+        quotesData = JSON.parse(content);
+      } catch (parseError) {
+        console.error("JSON parse error, content preview:", content.substring(0, 500));
+
+        // Versuche das JSON zu reparieren
+        // Manchmal fehlen Anführungszeichen um Werte
+        let fixedContent = content
+          // Ersetze null ohne Anführungszeichen
+          .replace(/:(\s*)null(\s*[,}\]])/gi, ':$1null$2')
+          // Entferne Zeilenumbrüche innerhalb von Strings (häufiges Problem)
+          .replace(/:\s*"([^"]*)\n([^"]*)"/g, ': "$1 $2"');
+
+        try {
+          quotesData = JSON.parse(fixedContent);
+        } catch {
+          // Letzter Versuch: Extrahiere einzelne vollständige Objekte manuell
+          const objectMatches: string[] = [];
+          let depth = 0;
+          let start = -1;
+          let inString = false;
+          let escapeNext = false;
+
+          for (let i = 0; i < content.length; i++) {
+            const char = content[i];
+
+            if (escapeNext) {
+              escapeNext = false;
+              continue;
+            }
+
+            if (char === '\\') {
+              escapeNext = true;
+              continue;
+            }
+
+            if (char === '"') {
+              inString = !inString;
+              continue;
+            }
+
+            if (inString) continue;
+
+            if (char === '{') {
+              if (depth === 0) start = i;
+              depth++;
+            } else if (char === '}') {
+              depth--;
+              if (depth === 0 && start !== -1) {
+                objectMatches.push(content.substring(start, i + 1));
+                start = -1;
+              }
+            }
+          }
+
+          if (objectMatches.length > 0) {
+            quotesData = objectMatches.map(match => {
+              try {
+                return JSON.parse(match);
+              } catch {
+                return null;
+              }
+            }).filter(Boolean);
+
+            if (quotesData.length > 0) {
+              console.log(`Recovered ${quotesData.length} quotes from truncated response`);
+            }
+          }
+
+          if (!quotesData || quotesData.length === 0) {
+            throw parseError;
+          }
+        }
+      }
+      const rawQuotes = Array.isArray(quotesData) ? quotesData : [quotesData];
+
+      // Validiere und filtere gültige Quotes
+      const quotes = rawQuotes.filter((q: any) => {
+        if (!q || typeof q !== 'object') return false;
+        if (!q.text || typeof q.text !== 'string' || q.text.length < 10) return false;
+        return true;
+      });
+
+      if (quotes.length === 0) {
+        throw new Error("No valid quotes in AI response");
+      }
+
+      // Save search context first
+      const normalizedQuery = normalizeQuery(args.query);
+      const contextId = await ctx.runMutation(api.search.saveSearchContext, {
+        searchQuery: args.query,
+        normalizedQuery,
+        categoryId: args.categoryId,
+        language: args.language,
+      });
+
+      // In DB speichern and create mappings
       const savedQuotes = [];
       for (const q of quotes) {
-        const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, {
+        // Bereite die Daten vor - undefined statt null für optionale Felder
+        const quoteData: any = {
           text: q.text,
-          author: q.author || null,
-          reference: q.reference,
           source: "ai_generated",
-          category: q.type || "quote",
           language: args.language,
           isPremium: false,
-          context: q.context,
-          explanation: q.explanation,
           situations: q.situations || [],
           tags: [...(q.tags || []), args.query.toLowerCase()],
           aiPrompt: `Search: ${args.query}`,
+        };
+
+        // Füge optionale Felder nur hinzu wenn sie einen Wert haben
+        if (q.author && q.author !== "null" && q.author !== null) {
+          quoteData.author = q.author;
+        }
+        if (q.reference) {
+          quoteData.reference = q.reference;
+        }
+        if (q.type) {
+          quoteData.category = q.type;
+        }
+        if (q.context) {
+          quoteData.context = q.context;
+        }
+        if (q.explanation) {
+          quoteData.explanation = q.explanation;
+        }
+
+        const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, quoteData);
+
+        // Create quote-context mapping for the main search query
+        await ctx.runMutation(api.search.addQuoteContextMapping, {
+          quoteId,
+          contextId,
+          relevanceScore: q.relevanceScore || 80,
+          isAiGenerated: true,
         });
 
-        savedQuotes.push({ _id: quoteId, ...q });
+        // Create additional context mappings for relevantQueries (multi-context support)
+        // This allows the same quote to be found via related search terms
+        if (q.relevantQueries && Array.isArray(q.relevantQueries)) {
+          for (const relatedQuery of q.relevantQueries) {
+            if (typeof relatedQuery === 'string' && relatedQuery.trim().length > 0) {
+              const relatedNormalized = normalizeQuery(relatedQuery);
+
+              // Create or get context for this related query
+              const relatedContextId = await ctx.runMutation(api.search.saveSearchContext, {
+                searchQuery: relatedQuery.trim(),
+                normalizedQuery: relatedNormalized,
+                categoryId: args.categoryId,
+                language: args.language,
+              });
+
+              // Map the quote to this related context with slightly lower relevance
+              await ctx.runMutation(api.search.addQuoteContextMapping, {
+                quoteId,
+                contextId: relatedContextId,
+                relevanceScore: Math.max(50, (q.relevanceScore || 80) - 10), // Slightly lower score for related queries
+                isAiGenerated: true,
+              });
+            }
+          }
+        }
+
+        savedQuotes.push({ _id: quoteId, ...q, relevanceScore: q.relevanceScore || 80 });
       }
 
-      return { quotes: savedQuotes, count: savedQuotes.length };
+      // Increment AI search count and record search history
+      if (args.userId) {
+        await ctx.runMutation(api.search.incrementAISearchCount, {
+          userId: args.userId,
+        });
+
+        // Record this search in user's history
+        await ctx.runMutation(api.readingHistory.recordUserSearch, {
+          userId: args.userId,
+          searchContextId: contextId,
+        });
+      }
+
+      return {
+        quotes: savedQuotes,
+        count: savedQuotes.length,
+        contextId,
+        wasAIGenerated: true,
+      };
     } catch (error: any) {
       console.error("AI search error:", error);
+      if (error.message === "AI_RATE_LIMIT_EXCEEDED") {
+        throw error;
+      }
       throw new Error(`Failed to generate search quotes: ${error.message}`);
     }
   },

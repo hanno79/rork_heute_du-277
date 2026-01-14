@@ -1,78 +1,110 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
-const FREE_USER_REPEAT_DAYS = 30;
-const PREMIUM_USER_REPEAT_DAYS = 180;
+// Days to avoid repeating a quote as "Quote of the Day"
+const DAILY_QUOTE_REPEAT_DAYS = 30;
 
-// Get daily quote (with history tracking)
+// Get daily quote - returns the SAME quote for ALL users on the same day
+// This ensures consistency: everyone sees the same "Quote of the Day"
 export const getDailyQuote = query({
   args: {
     language: v.string(),
-    userId: v.optional(v.string()),
+    userId: v.optional(v.string()), // Optional - for recording history only
   },
   handler: async (ctx, args) => {
-    // For now, always fetch English quotes (they have translations embedded)
-    const queryLanguage = "en";
+    const today = new Date().toISOString().split("T")[0]; // "2026-01-14"
 
-    if (!args.userId) {
-      // Guest user - return random quote
-      const quotes = await ctx.db
-        .query("quotes")
-        .withIndex("by_language", (q) => q.eq("language", queryLanguage))
-        .collect();
-
-      if (quotes.length === 0) {
-        return { quote: null, source: "none" };
-      }
-
-      const randomIndex = Math.floor(Math.random() * quotes.length);
-      return { quote: quotes[randomIndex], source: "database" };
-    }
-
-    // Authenticated user - get unseen quote
-    const profile = await ctx.db
-      .query("userProfiles")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+    // 1. Check if we already have a daily quote for today in this language
+    const existingDaily = await ctx.db
+      .query("dailyQuotes")
+      .withIndex("by_date_language", (q) =>
+        q.eq("date", today).eq("language", args.language)
+      )
       .first();
 
-    const repeatDays = profile?.isPremium
-      ? PREMIUM_USER_REPEAT_DAYS
-      : FREE_USER_REPEAT_DAYS;
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - repeatDays);
-    const cutoffDateStr = cutoffDate.toISOString().split("T")[0];
-
-    // Get recent history
-    const recentHistory = await ctx.db
-      .query("userQuoteHistory")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .collect();
-
-    const recentQuoteIds = new Set(
-      recentHistory
-        .filter((h) => h.shownAt >= cutoffDateStr)
-        .map((h) => h.quoteId)
-    );
-
-    // Get all quotes for the language
-    const allQuotes = await ctx.db
-      .query("quotes")
-      .withIndex("by_language", (q) => q.eq("language", queryLanguage))
-      .collect();
-
-    const unseenQuotes = allQuotes.filter((q) => !recentQuoteIds.has(q._id));
-
-    let quote;
-    if (unseenQuotes.length > 0) {
-      const randomIndex = Math.floor(Math.random() * unseenQuotes.length);
-      quote = unseenQuotes[randomIndex];
-    } else {
-      // All seen - return random (AI generation will be triggered separately)
-      const randomIndex = Math.floor(Math.random() * allQuotes.length);
-      quote = allQuotes[randomIndex];
+    if (existingDaily) {
+      // Return the existing daily quote
+      const quote = await ctx.db.get(existingDaily.quoteId);
+      if (quote) {
+        return { quote, source: "daily", needsSelection: false };
+      }
     }
 
-    return { quote, source: "database", isPremium: profile?.isPremium };
+    // 2. No daily quote for today - return null to trigger client-side selection
+    // The client will call ensureDailyQuote mutation to select and store
+    return { quote: null, source: "none", needsSelection: true };
+  },
+});
+
+// Ensure daily quote exists - selects and stores a quote for today if needed
+// This mutation is called by the client when no daily quote exists
+export const ensureDailyQuote = mutation({
+  args: {
+    language: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const today = new Date().toISOString().split("T")[0];
+
+    // Double-check if already exists (race condition protection)
+    const existing = await ctx.db
+      .query("dailyQuotes")
+      .withIndex("by_date_language", (q) =>
+        q.eq("date", today).eq("language", args.language)
+      )
+      .first();
+
+    if (existing) {
+      const quote = await ctx.db.get(existing.quoteId);
+      return { quote, alreadyExisted: true };
+    }
+
+    // Get recent daily quotes to avoid repetition
+    const recentDailyQuotes = await ctx.db
+      .query("dailyQuotes")
+      .withIndex("by_language", (q) => q.eq("language", args.language))
+      .order("desc")
+      .take(DAILY_QUOTE_REPEAT_DAYS);
+
+    const recentQuoteIds = new Set(recentDailyQuotes.map((d) => d.quoteId));
+
+    // Get all available quotes
+    const allQuotesInDb = await ctx.db.query("quotes").collect();
+
+    // Prioritize: 1) Quotes in user's language, 2) English quotes (have translations)
+    const quotesInUserLanguage = allQuotesInDb.filter((q) => q.language === args.language);
+    const englishQuotes = allQuotesInDb.filter((q) => q.language === "en");
+    const allQuotes = [...quotesInUserLanguage, ...englishQuotes];
+
+    // Remove duplicates
+    const seenTexts = new Set<string>();
+    const uniqueQuotes = allQuotes.filter((q) => {
+      const key = q.text.toLowerCase().substring(0, 50);
+      if (seenTexts.has(key)) return false;
+      seenTexts.add(key);
+      return true;
+    });
+
+    if (uniqueQuotes.length === 0) {
+      return { quote: null, error: "No quotes available" };
+    }
+
+    // Filter out recently used quotes
+    const availableQuotes = uniqueQuotes.filter((q) => !recentQuoteIds.has(q._id));
+    const candidates = availableQuotes.length > 0 ? availableQuotes : uniqueQuotes;
+
+    // Select random quote
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    const selectedQuote = candidates[randomIndex];
+
+    // Store as today's daily quote
+    await ctx.db.insert("dailyQuotes", {
+      date: today,
+      quoteId: selectedQuote._id,
+      language: args.language,
+      selectedAt: Date.now(),
+    });
+
+    return { quote: selectedQuote, alreadyExisted: false };
   },
 });
 
@@ -248,23 +280,29 @@ export const insertAIQuote = mutation({
     aiPrompt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const quoteId = await ctx.db.insert("quotes", {
+    // Build the document object, only including optional fields if they have values
+    // v.optional() does NOT allow null, only undefined (missing field) or valid value
+    const doc: any = {
       text: args.text,
-      author: args.author || null,
-      reference: args.reference || null,
       source: args.source as "static" | "ai_generated",
-      category: args.category as any,
       language: args.language,
       isPremium: args.isPremium,
-      context: args.context || null,
-      explanation: args.explanation || null,
       situations: args.situations || [],
       tags: args.tags || [],
       translations: {},
       reflectionQuestions: [],
       practicalTips: [],
-      aiPrompt: args.aiPrompt || null,
-    });
+    };
+
+    // Only add optional fields if they have truthy values
+    if (args.author) doc.author = args.author;
+    if (args.reference) doc.reference = args.reference;
+    if (args.category) doc.category = args.category;
+    if (args.context) doc.context = args.context;
+    if (args.explanation) doc.explanation = args.explanation;
+    if (args.aiPrompt) doc.aiPrompt = args.aiPrompt;
+
+    const quoteId = await ctx.db.insert("quotes", doc);
 
     return quoteId;
   },

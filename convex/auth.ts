@@ -127,14 +127,31 @@ export const getCurrentUser = query({
       return null;
     }
 
+    // Check if premium has expired (for canceled subscriptions)
+    let isPremiumActive = profile.isPremium;
+    if (
+      profile.isPremium &&
+      profile.stripeSubscriptionStatus === "canceled" &&
+      profile.premiumExpiresAt &&
+      profile.premiumExpiresAt < Date.now()
+    ) {
+      // Premium has expired - return false but don't update DB in query
+      // (mutations should handle the actual DB update)
+      isPremiumActive = false;
+    }
+
     return {
       id: profile.userId,
       email: profile.email,
       name: profile.name,
-      isPremium: profile.isPremium,
+      isPremium: isPremiumActive,
       premiumExpiresAt: profile.premiumExpiresAt,
       stripeCustomerId: profile.stripeCustomerId,
       stripeSubscriptionId: profile.stripeSubscriptionId,
+      // Subscription management fields
+      stripeSubscriptionStatus: profile.stripeSubscriptionStatus,
+      subscriptionCanceledAt: profile.subscriptionCanceledAt,
+      subscriptionPlan: profile.subscriptionPlan,
     };
   },
 });
@@ -241,6 +258,8 @@ export const updatePremiumStatus = mutation({
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
     premiumExpiresAt: v.optional(v.number()),
+    stripeSubscriptionStatus: v.optional(v.string()),
+    subscriptionPlan: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Find user by userId
@@ -259,9 +278,109 @@ export const updatePremiumStatus = mutation({
       stripeCustomerId: args.stripeCustomerId,
       stripeSubscriptionId: args.stripeSubscriptionId,
       premiumExpiresAt: args.premiumExpiresAt,
+      stripeSubscriptionStatus: args.stripeSubscriptionStatus,
+      subscriptionPlan: args.subscriptionPlan,
     });
 
     return { success: true };
+  },
+});
+
+// Cancel subscription (sets status to canceled, keeps premium until expiry)
+export const cancelSubscription = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find user by userId
+    const user = await ctx.db
+      .query("userProfiles")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.isPremium) {
+      throw new Error("No active subscription to cancel");
+    }
+
+    // Set subscription status to canceled
+    // User keeps premium access until premiumExpiresAt
+    await ctx.db.patch(user._id, {
+      stripeSubscriptionStatus: "canceled",
+      subscriptionCanceledAt: Date.now(),
+    });
+
+    return {
+      success: true,
+      premiumExpiresAt: user.premiumExpiresAt,
+    };
+  },
+});
+
+// Reactivate subscription (for users who canceled but want to continue)
+export const reactivateSubscription = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Find user by userId
+    const user = await ctx.db
+      .query("userProfiles")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (!user.isPremium || user.stripeSubscriptionStatus !== "canceled") {
+      throw new Error("No canceled subscription to reactivate");
+    }
+
+    // Reactivate subscription
+    await ctx.db.patch(user._id, {
+      stripeSubscriptionStatus: "active",
+      subscriptionCanceledAt: undefined,
+    });
+
+    return { success: true };
+  },
+});
+
+// Check and update expired premium subscriptions
+export const checkAndExpirePremium = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (!user) {
+      return { updated: false, reason: "User not found" };
+    }
+
+    // Check if premium should be expired
+    if (
+      user.isPremium &&
+      user.stripeSubscriptionStatus === "canceled" &&
+      user.premiumExpiresAt &&
+      user.premiumExpiresAt < Date.now()
+    ) {
+      // Premium has expired - update database
+      await ctx.db.patch(user._id, {
+        isPremium: false,
+        stripeSubscriptionStatus: "expired",
+      });
+      return { updated: true, reason: "Premium expired" };
+    }
+
+    return { updated: false, reason: "Premium still active or not canceled" };
   },
 });
 
@@ -278,6 +397,9 @@ export const getAllUsers = query({
       stripeCustomerId: u.stripeCustomerId,
       stripeSubscriptionId: u.stripeSubscriptionId,
       premiumExpiresAt: u.premiumExpiresAt,
+      stripeSubscriptionStatus: u.stripeSubscriptionStatus,
+      subscriptionCanceledAt: u.subscriptionCanceledAt,
+      subscriptionPlan: u.subscriptionPlan,
     }));
   },
 });

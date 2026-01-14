@@ -9,6 +9,22 @@ import { useAuth } from '@/providers/AuthProvider';
 // Enable Convex features
 const USE_CONVEX = true;
 
+// Rate limit info type
+export interface RateLimitInfo {
+  aiSearchCount: number;
+  maxSearches: number;
+  canUseAI: boolean;
+  remaining: number;
+}
+
+// Search result type with extra info
+export interface SearchResult {
+  quotes: Quote[];
+  source: 'cached' | 'category' | 'database' | 'ai' | 'insufficient';
+  wasAIGenerated: boolean;
+  rateLimit: RateLimitInfo | null;
+}
+
 export default function useQuotes() {
   const [quoteOfTheDay, setQuoteOfTheDay] = useState<Quote | null>(null);
   const [searchResults, setSearchResults] = useState<Quote[]>([]);
@@ -17,16 +33,31 @@ export default function useQuotes() {
   const [hasMoreResults, setHasMoreResults] = useState(false);
   const [dynamicQuotes, setDynamicQuotes] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null);
+  const [searchSource, setSearchSource] = useState<string>('');
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const { currentLanguage } = useLanguage();
   const { user } = useAuth();
 
-  // Convex queries
+  // Convex queries and mutations
   const dailyQuoteData = useQuery(
     api.quotes.getDailyQuote,
     USE_CONVEX ? { language: currentLanguage, userId: user?.id } : "skip"
   );
 
   const recordHistoryMutation = useMutation(api.quotes.recordQuoteHistory);
+  const ensureDailyQuoteMutation = useMutation(api.quotes.ensureDailyQuote);
+  const performSmartSearchAction = useAction(api.search.performSmartSearch);
+
+  // Get user profile for premium status
+  const userProfile = useQuery(
+    api.auth.getCurrentUser,
+    user?.id ? { userId: user.id } : "skip"
+  );
+  const isPremium = userProfile?.isPremium === true;
+
+  // Track if we've already triggered ensureDailyQuote to prevent multiple calls
+  const [dailyQuoteInitialized, setDailyQuoteInitialized] = useState(false);
 
   // Load dynamic quotes from storage (for local fallback)
   useEffect(() => {
@@ -34,23 +65,75 @@ export default function useQuotes() {
   }, []);
 
   // Get quote of the day when it's loaded from Convex
+  // This handles the global daily quote system - same quote for all users
   useEffect(() => {
-    if (dailyQuoteData?.quote) {
-      const localizedQuote = applyLocalization(dailyQuoteData.quote, currentLanguage);
-      setQuoteOfTheDay(localizedQuote);
+    const handleDailyQuote = async () => {
+      if (!dailyQuoteData) return; // Still loading
 
-      // Record in history if user is logged in
-      if (user?.id && dailyQuoteData.quote._id) {
-        recordHistoryMutation({
-          userId: user.id,
-          quoteId: dailyQuoteData.quote._id as any,
-        }).catch(console.error);
+      // Case 1: Daily quote exists - use it
+      if (dailyQuoteData.quote) {
+        const localizedQuote = applyLocalization(dailyQuoteData.quote, currentLanguage);
+        setQuoteOfTheDay(localizedQuote);
+        setDailyQuoteInitialized(true);
+
+        // Record in history if user is logged in
+        if (user?.id && dailyQuoteData.quote._id) {
+          recordHistoryMutation({
+            userId: user.id,
+            quoteId: dailyQuoteData.quote._id as any,
+          }).catch(console.error);
+        }
+
+        // Cache locally
+        cacheQuote(localizedQuote);
+        return;
       }
 
-      // Cache locally
-      cacheQuote(localizedQuote);
-    }
-  }, [dailyQuoteData, currentLanguage, user?.id]);
+      // Case 2: No daily quote yet - need to select one (first user of the day)
+      if (dailyQuoteData.needsSelection && !dailyQuoteInitialized) {
+        setDailyQuoteInitialized(true); // Prevent multiple calls
+        console.log('No daily quote for today, selecting one...');
+
+        try {
+          const result = await ensureDailyQuoteMutation({
+            language: currentLanguage,
+          });
+
+          if (result.quote) {
+            const localizedQuote = applyLocalization(result.quote, currentLanguage);
+            setQuoteOfTheDay(localizedQuote);
+
+            // Record in history if user is logged in
+            if (user?.id && result.quote._id) {
+              recordHistoryMutation({
+                userId: user.id,
+                quoteId: result.quote._id as any,
+              }).catch(console.error);
+            }
+
+            // Cache locally
+            cacheQuote(localizedQuote);
+            console.log('Daily quote selected and stored:', result.alreadyExisted ? 'already existed' : 'newly selected');
+          }
+        } catch (error) {
+          console.error('Error ensuring daily quote:', error);
+          // Fallback to local
+          const localQuote = fallbackToLocalQuote();
+          if (localQuote) {
+            setQuoteOfTheDay(localQuote);
+            cacheQuote(localQuote);
+          }
+        }
+      }
+    };
+
+    handleDailyQuote();
+  }, [dailyQuoteData, currentLanguage, user?.id, dailyQuoteInitialized]);
+
+  // Reset initialized flag when language changes (need to get quote for new language)
+  useEffect(() => {
+    setDailyQuoteInitialized(false);
+  }, [currentLanguage]);
 
   // Fallback: Get quote from cache or local on mount
   useEffect(() => {
@@ -88,7 +171,8 @@ export default function useQuotes() {
   };
 
   // Helper function to apply localization to a quote
-  const applyLocalization = useCallback((quote: any, language: string): Quote => {
+  // Preserves _id for Convex operations (favorites, etc.)
+  const applyLocalization = useCallback((quote: any, language: string): Quote & { _id?: string } => {
     if (!quote) return quote;
 
     // Handle Convex format (camelCase)
@@ -122,10 +206,15 @@ export default function useQuotes() {
         tags: translation.tags || normalizedQuote.tags,
         reflectionQuestions: translation.reflectionQuestions || normalizedQuote.reflectionQuestions,
         practicalTips: translation.practicalTips || normalizedQuote.practicalTips,
+        _id: quote._id,  // Preserve Convex ID for database operations
       };
     }
 
-    return normalizedQuote;
+    // Return with preserved _id for Convex operations
+    return {
+      ...normalizedQuote,
+      _id: quote._id,  // Preserve Convex ID for database operations
+    };
   }, []);
 
   // Fallback to local quotes when API is unavailable
@@ -182,34 +271,109 @@ export default function useQuotes() {
     }
   }, [currentLanguage, applyLocalization, fallbackToLocalQuote, dailyQuoteData]);
 
-  // Search function
-  const searchQuotes = useCallback(async (query: string) => {
+  // Smart search function - uses Convex smartSearch with AI fallback
+  // DB-First approach: Check DB for existing quotes before calling AI
+  const searchQuotes = useCallback(async (query: string, usePremiumAI: boolean = true) => {
     if (!query.trim()) {
       setSearchResults([]);
       setAllSearchResults([]);
       setHasMoreResults(false);
+      setSearchSource('');
       return;
     }
 
     setIsSearching(true);
+    setSearchSource('');
 
     try {
-      // For now, use local search until Convex search is fully tested
-      const localResults = searchLocalQuotes(query);
-      const uniqueResults = removeDuplicateQuotes(localResults);
+      if (!USE_CONVEX) {
+        // Fallback to local search
+        const localResults = searchLocalQuotes(query);
+        const uniqueResults = removeDuplicateQuotes(localResults);
 
-      setAllSearchResults(uniqueResults);
-      const initialResults = getInitialResults(uniqueResults);
-      setSearchResults(initialResults);
-      setHasMoreResults(uniqueResults.length > initialResults.length);
+        setAllSearchResults(uniqueResults);
+        const initialResults = getInitialResults(uniqueResults);
+        setSearchResults(initialResults);
+        setHasMoreResults(uniqueResults.length > initialResults.length);
+        setSearchSource('local');
+        return;
+      }
+
+      // Use the new performSmartSearch action (DB-first, then AI if needed)
+      setIsGeneratingAI(true); // Show loading state
+
+      try {
+        const result = await performSmartSearchAction({
+          query,
+          language: currentLanguage,
+          userId: user?.id,
+          isPremium: isPremium,
+        });
+
+        // Process the quotes
+        if (result.quotes && result.quotes.length > 0) {
+          const normalizedQuotes = result.quotes.map((q: any) => applyLocalization(q, currentLanguage));
+          setAllSearchResults(normalizedQuotes);
+          setSearchResults(normalizedQuotes.slice(0, 3));
+          setHasMoreResults(normalizedQuotes.length > 3);
+          setSearchSource(result.source || 'database');
+
+          // Update rate limit info if available
+          if (result.rateLimit) {
+            setRateLimit(result.rateLimit);
+          }
+
+          console.log(`Search completed: ${result.quotes.length} quotes from ${result.source}, AI generated: ${result.wasAIGenerated}`);
+          return;
+        }
+
+        // No results from smart search, fall back to local
+        console.log('Smart search returned no results, falling back to local');
+        const localResults = searchLocalQuotes(query);
+        const uniqueResults = removeDuplicateQuotes(localResults);
+
+        setAllSearchResults(uniqueResults);
+        const initialResults = getInitialResults(uniqueResults);
+        setSearchResults(initialResults);
+        setHasMoreResults(uniqueResults.length > initialResults.length);
+        setSearchSource('local');
+      } catch (error: any) {
+        console.error('Smart search error:', error);
+
+        // Check for rate limit error
+        if (error.message?.includes('AI_RATE_LIMIT_EXCEEDED')) {
+          setRateLimit({
+            aiSearchCount: 10,
+            maxSearches: 10,
+            canUseAI: false,
+            remaining: 0,
+          });
+        }
+
+        // Fall back to local search
+        const localResults = searchLocalQuotes(query);
+        const uniqueResults = removeDuplicateQuotes(localResults);
+
+        setAllSearchResults(uniqueResults);
+        const initialResults = getInitialResults(uniqueResults);
+        setSearchResults(initialResults);
+        setHasMoreResults(uniqueResults.length > initialResults.length);
+        setSearchSource('local');
+      }
     } catch (error) {
       console.error('Search error:', error);
-      setSearchResults([]);
-      setAllSearchResults([]);
+      // Last resort fallback to local
+      const localResults = searchLocalQuotes(query);
+      const uniqueResults = removeDuplicateQuotes(localResults);
+      setAllSearchResults(uniqueResults);
+      setSearchResults(uniqueResults.slice(0, 3));
+      setHasMoreResults(uniqueResults.length > 3);
+      setSearchSource('local');
     } finally {
       setIsSearching(false);
+      setIsGeneratingAI(false);
     }
-  }, [currentLanguage]);
+  }, [currentLanguage, user?.id, isPremium, applyLocalization, performSmartSearchAction]);
 
   // Local search function (simplified version)
   const searchLocalQuotes = (query: string): Quote[] => {
@@ -306,6 +470,10 @@ export default function useQuotes() {
     loadMoreResults,
     getQuoteById,
     refreshQuote,
-    dynamicQuotes
+    dynamicQuotes,
+    // New properties for premium search
+    rateLimit,
+    searchSource,
+    isGeneratingAI,
   };
 }

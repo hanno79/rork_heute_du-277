@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,6 +12,7 @@ import {
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import colors from '@/constants/colors';
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 export default function RegisterScreen() {
   const [name, setName] = useState<string>('');
@@ -21,20 +21,21 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { register } = useAuth();
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      Alert.alert('Fehler', 'Bitte füllen Sie alle Felder aus.');
+      showAlert('Fehler', 'Bitte füllen Sie alle Felder aus.', [{ text: 'OK', onPress: () => {} }], '⚠️');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Fehler', 'Die Passwörter stimmen nicht überein.');
+      showAlert('Fehler', 'Die Passwörter stimmen nicht überein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein.');
+      showAlert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -43,33 +44,34 @@ export default function RegisterScreen() {
       console.log('Starting registration process...');
       const result = await register(email.trim(), password, name.trim());
       console.log('Registration result:', result);
-      
+
       if (result.success) {
         console.log('Registration successful, navigating to tabs');
-        Alert.alert(
-          'Registrierung erfolgreich!', 
+        showAlert(
+          'Registrierung erfolgreich!',
           'Willkommen bei Heute Du. Sie sind jetzt angemeldet.',
-          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
+          '🎉'
         );
       } else {
         console.error('Registration failed:', result.error);
         const errorMessage = result.error || 'Unbekannter Fehler';
-        
+
         // Provide more user-friendly error messages
         let displayMessage = errorMessage;
         if (errorMessage.includes('email confirmation')) {
           displayMessage = 'Die Registrierung war erfolgreich! Sie können sich jetzt mit Ihren Daten anmelden.';
-          Alert.alert('Registrierung abgeschlossen', displayMessage, [
+          showAlert('Registrierung abgeschlossen', displayMessage, [
             { text: 'Zur Anmeldung', onPress: () => router.push('/auth/login') }
-          ]);
+          ], '✅');
           return;
         }
-        
-        Alert.alert('Registrierung fehlgeschlagen', displayMessage);
+
+        showAlert('Registrierung fehlgeschlagen', displayMessage, [{ text: 'OK', onPress: () => {} }], '❌');
       }
     } catch (err) {
       console.error('Register error:', err);
-      Alert.alert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
+      showAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.', [{ text: 'OK', onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);
     }
@@ -173,6 +175,8 @@ export default function RegisterScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <AlertComponent />
     </KeyboardAvoidingView>
   );
 }

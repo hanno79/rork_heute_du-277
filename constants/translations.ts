@@ -57,6 +57,8 @@ export const translations = {
     loginRequiredMessage: "You need to be logged in to save favorites. Would you like to login now?",
     loginButton: "Login",
     cancelButton: "Cancel",
+    loadingFavorites: "Loading favorites...",
+    loginToSaveFavorites: "Sign in to save and sync your favorite quotes across devices.",
     
     // Profile Screen
     yourAccount: "Your Account",
@@ -156,7 +158,27 @@ export const translations = {
     // Common
     back: "Back",
     relevantSituations: "Relevant Situations",
-    
+
+    // AI Search
+    aiGeneratingQuotes: "AI is generating matching quotes...",
+    aiGeneratingWait: "This may take a few seconds",
+    aiSearchesRemaining: "{remaining} of {max} AI searches available today",
+    personalizedAiResults: "Personalized AI results",
+    aiRateLimitReached: "Daily AI limit reached. More searches available tomorrow.",
+
+    // Reading History
+    readingHistoryTitle: "Reading History",
+    dailyQuotesSection: "Daily Quotes",
+    searchHistorySection: "Your Searches",
+    noReadingHistory: "No reading history yet",
+    noSearchHistory: "No search history yet",
+    premiumSearchHistory: "Upgrade to Premium to see your search history",
+    last3Days: "last 3 days",
+    last7Days: "last 7 days",
+    premiumHistoryInfo: "As a Premium user, you can see your last 7 daily quotes and your last 5 searches.",
+    freeHistoryInfo: "Upgrade to Premium to see your last 7 daily quotes and search history.",
+    managePremium: "Manage Premium",
+
     // Languages
     english: "English",
     german: "Deutsch",
@@ -221,7 +243,9 @@ export const translations = {
     loginRequiredMessage: "Sie müssen angemeldet sein, um Favoriten zu speichern. Möchten Sie sich jetzt anmelden?",
     loginButton: "Anmelden",
     cancelButton: "Abbrechen",
-    
+    loadingFavorites: "Favoriten werden geladen...",
+    loginToSaveFavorites: "Melden Sie sich an, um Ihre Lieblingszitate zu speichern und geräteübergreifend zu synchronisieren.",
+
     // Profile Screen
     yourAccount: "Ihr Konto",
     premiumStatus: "Premium-Status",
@@ -320,7 +344,27 @@ export const translations = {
     // Common
     back: "Zurück",
     relevantSituations: "Relevante Situationen",
-    
+
+    // AI Search
+    aiGeneratingQuotes: "AI generiert passende Zitate...",
+    aiGeneratingWait: "Dies kann einige Sekunden dauern",
+    aiSearchesRemaining: "{remaining} von {max} AI-Suchen heute verfügbar",
+    personalizedAiResults: "Personalisierte AI-Ergebnisse",
+    aiRateLimitReached: "Tägliches AI-Limit erreicht. Weitere Suchen morgen verfügbar.",
+
+    // Reading History
+    readingHistoryTitle: "Lesehistorie",
+    dailyQuotesSection: "Tägliche Sprüche",
+    searchHistorySection: "Deine Suchen",
+    noReadingHistory: "Noch keine Lesehistorie",
+    noSearchHistory: "Noch keine Suchhistorie",
+    premiumSearchHistory: "Upgrade auf Premium, um deine Suchhistorie zu sehen",
+    last3Days: "letzte 3 Tage",
+    last7Days: "letzte 7 Tage",
+    premiumHistoryInfo: "Als Premium-Nutzer siehst du deine letzten 7 täglichen Sprüche und deine letzten 5 Suchen.",
+    freeHistoryInfo: "Upgrade auf Premium, um deine letzten 7 täglichen Sprüche und Suchhistorie zu sehen.",
+    managePremium: "Premium verwalten",
+
     // Languages
     english: "English",
     german: "Deutsch",

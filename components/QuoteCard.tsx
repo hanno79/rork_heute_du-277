@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Platform, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Heart } from 'lucide-react-native';
 import { Quote } from '@/mocks/quotes';
 import colors from '@/constants/colors';
@@ -7,6 +7,7 @@ import typography from '@/constants/typography';
 import useLanguage from '@/hooks/useLanguage';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useRouter } from 'expo-router';
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 interface QuoteCardProps {
   quote: Quote;
@@ -18,6 +19,7 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
   const { t, currentLanguage } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [isToggling, setIsToggling] = useState<boolean>(false);
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   const handlePress = () => {
     // Use Convex _id if available, fallback to id for old mock data
@@ -37,31 +39,35 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
 
       if (result.requiresLogin) {
         // User is not logged in
-        if (Platform.OS !== 'web') {
-          Alert.alert(
-            t('loginRequiredForFavorites'),
-            t('loginRequiredMessage'),
-            [
-              {
-                text: t('cancelButton'),
-                style: 'cancel',
+        showAlert(
+          t('loginRequiredForFavorites'),
+          t('loginRequiredMessage'),
+          [
+            {
+              text: t('cancelButton'),
+              style: 'cancel',
+              onPress: () => {},
+            },
+            {
+              text: t('loginButton'),
+              onPress: () => {
+                router.push('/auth/login');
               },
-              {
-                text: t('loginButton'),
-                onPress: () => {
-                  router.push('/auth/login');
-                },
-              },
-            ]
-          );
-        }
+            },
+          ],
+          '🔐'
+        );
       } else if (result.success) {
         // Successfully added/removed favorite
         const message = result.wasAdded ? t('addedToFavorites') : t('removedFromFavorites');
+        const icon = result.wasAdded ? '❤️' : '💔';
 
-        if (Platform.OS !== 'web') {
-          Alert.alert('', message);
-        }
+        showAlert(
+          'Favorit',
+          message,
+          [{ text: 'OK', onPress: () => {} }],
+          icon
+        );
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
@@ -86,49 +92,52 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
   };
 
   return (
-    <TouchableOpacity 
-      style={[styles.card, compact && styles.compactCard]} 
-      onPress={handlePress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.typeContainer}>
-          <Text style={styles.typeLabel}>{getTypeLabel(quote.type)}</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.favoriteButton}
-          onPress={handleFavoritePress}
-          disabled={isToggling}
-          activeOpacity={0.7}
-        >
-          <Heart 
-            size={20} 
-            color={isFavorite(quote.id) ? colors.primary : colors.lightText}
-            fill={isFavorite(quote.id) ? colors.primary : 'transparent'}
-          />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.quoteContainer}>
-        <Text style={typography.verse}>&quot;{displayText}&quot;</Text>
-        <Text style={typography.reference}>
-          {quote.author ? `— ${quote.author}` : quote.reference}
-        </Text>
-      </View>
-      
-      {!compact && (
-        <View style={styles.situationsContainer}>
-          <Text style={typography.subtitle}>{t('relevantSituations')}</Text>
-          <View style={styles.tagsContainer}>
-            {displaySituations.slice(0, 3).map((situation, index) => (
-              <View key={index} style={styles.tag}>
-                <Text style={styles.tagText}>{situation}</Text>
-              </View>
-            ))}
+    <>
+      <TouchableOpacity
+        style={[styles.card, compact && styles.compactCard]}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.typeContainer}>
+            <Text style={styles.typeLabel}>{getTypeLabel(quote.type)}</Text>
           </View>
+          <TouchableOpacity
+            style={styles.favoriteButton}
+            onPress={handleFavoritePress}
+            disabled={isToggling}
+            activeOpacity={0.7}
+          >
+            <Heart
+              size={20}
+              color={isFavorite(quote.id) ? colors.primary : colors.lightText}
+              fill={isFavorite(quote.id) ? colors.primary : 'transparent'}
+            />
+          </TouchableOpacity>
         </View>
-      )}
-    </TouchableOpacity>
+
+        <View style={styles.quoteContainer}>
+          <Text style={typography.verse}>&quot;{displayText}&quot;</Text>
+          <Text style={typography.reference}>
+            {quote.author ? `— ${quote.author}` : quote.reference}
+          </Text>
+        </View>
+
+        {!compact && (
+          <View style={styles.situationsContainer}>
+            <Text style={typography.subtitle}>{t('relevantSituations')}</Text>
+            <View style={styles.tagsContainer}>
+              {displaySituations.slice(0, 3).map((situation, index) => (
+                <View key={index} style={styles.tag}>
+                  <Text style={styles.tagText}>{situation}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
+      <AlertComponent />
+    </>
   );
 }
 

@@ -11,6 +11,21 @@ import useLanguage from '@/hooks/useLanguage';
 const FAVORITES_KEY = 'favorites';
 const USE_CONVEX = true;
 
+// Helper to check if a quote has a valid Convex ID
+const hasConvexId = (quote: any): boolean => {
+  // Convex IDs are typically longer and don't follow UUID format
+  // Mock IDs follow UUID format like "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  const id = quote._id || quote.id;
+  if (!id) return false;
+
+  // Check if it's a UUID (mock ID format)
+  const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+  if (uuidPattern.test(id)) return false;
+
+  // If it has _id property, it's likely a Convex quote
+  return !!quote._id;
+};
+
 // Helper function to get complete quote data from mocks with localization
 const getCompleteQuoteData = (quoteId: string, basicQuoteData: any, currentLanguage: string): Quote => {
   // Try to find the complete quote in mocks first
@@ -71,19 +86,24 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   // Load favorites from Convex or AsyncStorage
   useEffect(() => {
     if (isAuthenticated && user) {
-      if (USE_CONVEX && convexFavorites) {
-        // Process Convex favorites
-        const processedFavorites = convexFavorites.favorites
-          .map((quote: any) => getCompleteQuoteData(quote._id, quote, currentLanguage))
-          .filter(Boolean) as Quote[];
+      if (USE_CONVEX) {
+        // Convex is being used
+        if (convexFavorites !== undefined) {
+          // Query has completed - process the results
+          const processedFavorites = convexFavorites.favorites
+            .map((quote: any) => getCompleteQuoteData(quote._id, quote, currentLanguage))
+            .filter(Boolean) as Quote[];
 
-        setFavorites(processedFavorites);
-        setIsLoading(false);
-      } else if (!USE_CONVEX) {
+          setFavorites(processedFavorites);
+          setIsLoading(false);
+        }
+        // If convexFavorites === undefined, the query is still loading (isLoading stays true)
+      } else {
         // Load from AsyncStorage
         loadFavoritesFromStorage();
       }
     } else {
+      // Not authenticated
       setFavorites([]);
       setIsLoading(false);
     }
@@ -127,14 +147,16 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       return;
     }
 
-    console.log('Adding quote to favorites:', quote.id);
+    const quoteWithId = quote as any;
+    const convexId = quoteWithId._id;
+    console.log('Adding quote to favorites:', quote.id, 'Convex ID:', convexId);
 
-    if (USE_CONVEX) {
+    // Check if the quote has a valid Convex ID
+    if (USE_CONVEX && hasConvexId(quoteWithId)) {
       try {
-        // Find the quote in Convex by text (since we might not have the _id)
         await addFavoriteMutation({
           userId: user.id,
-          quoteId: quote.id as any, // Will need to be converted to proper ID
+          quoteId: convexId,
         });
         console.log('Successfully added to favorites in Convex');
       } catch (error) {
@@ -144,44 +166,53 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
+      // Mock quote without Convex ID - use local storage
+      console.log('Quote has no Convex ID, using local storage');
       const newFavorites = [...favorites, quote];
       await saveFavoritesToStorage(newFavorites);
     }
   };
 
-  const removeFromFavorites = async (quoteId: string) => {
+  const removeFromFavorites = async (quote: Quote) => {
     if (!user || !isAuthenticated) {
       console.log('User not authenticated, cannot remove from favorites');
       return;
     }
 
-    console.log('Removing quote from favorites:', quoteId);
+    const quoteWithId = quote as any;
+    const convexId = quoteWithId._id;
+    console.log('Removing quote from favorites:', quote.id, 'Convex ID:', convexId);
 
-    if (USE_CONVEX) {
+    // Check if the quote has a valid Convex ID
+    if (USE_CONVEX && hasConvexId(quoteWithId)) {
       try {
         await removeFavoriteMutation({
           userId: user.id,
-          quoteId: quoteId as any,
+          quoteId: convexId,
         });
         console.log('Successfully removed from favorites in Convex');
       } catch (error) {
         console.error('Error removing from Convex favorites:', error);
         // Fallback to local storage
-        const newFavorites = favorites.filter(fav => fav.id !== quoteId);
+        const newFavorites = favorites.filter(fav => fav.id !== quote.id);
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
-      const newFavorites = favorites.filter(fav => fav.id !== quoteId);
+      // Mock quote without Convex ID - use local storage
+      console.log('Quote has no Convex ID, using local storage');
+      const newFavorites = favorites.filter(fav => fav.id !== quote.id);
       await saveFavoritesToStorage(newFavorites);
     }
   };
 
   const isFavorite = (quoteId: string): boolean => {
-    return favorites.some(fav => fav.id === quoteId);
+    // Check by both id and _id
+    return favorites.some(fav => fav.id === quoteId || (fav as any)._id === quoteId);
   };
 
   const toggleFavorite = async (quote: Quote): Promise<{ success: boolean; wasAdded?: boolean; requiresLogin?: boolean }> => {
-    console.log('Toggling favorite for quote:', quote.id);
+    const quoteWithId = quote as any;
+    console.log('Toggling favorite for quote:', quote.id, 'Convex ID:', quoteWithId._id);
 
     // Check if user is authenticated
     if (!isAuthenticated || !user) {
@@ -189,8 +220,8 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       return { success: false, requiresLogin: true };
     }
 
-    if (isFavorite(quote.id)) {
-      await removeFromFavorites(quote.id);
+    if (isFavorite(quote.id) || (quoteWithId._id && isFavorite(quoteWithId._id))) {
+      await removeFromFavorites(quote);
       return { success: true, wasAdded: false };
     } else {
       await addToFavorites(quote);

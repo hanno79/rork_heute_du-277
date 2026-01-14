@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { SubscriptionPlan } from '@/lib/stripe';
 
 export interface PaymentResult {
@@ -6,94 +5,107 @@ export interface PaymentResult {
   error?: string;
   subscriptionId?: string;
   customerId?: string;
+  cancelAt?: number; // Timestamp when subscription will end after cancellation
+}
+
+// Callback types for UI dialogs - these are handled by the calling component
+export interface PaymentConfirmationConfig {
+  plan: SubscriptionPlan;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export interface CancellationConfirmationConfig {
+  expiryDate: string;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 // Mock Stripe service for development/testing
+// This service no longer shows its own dialogs - it returns configs for the caller to display
 export class MockStripeService {
-  // Simulate payment processing with realistic delays and UI
-  async handleSubscriptionWithPaymentSheet(
+  // Returns the config for showing a payment confirmation dialog
+  // The caller should show the dialog and call onConfirm/onCancel
+  getPaymentConfirmationConfig(
     priceId: string,
     userId: string,
-    plan: SubscriptionPlan
-  ): Promise<PaymentResult> {
+    plan: SubscriptionPlan,
+    onResult: (result: PaymentResult) => void
+  ): PaymentConfirmationConfig {
     console.log('=== MOCK STRIPE SERVICE ===');
-    console.log('handleSubscriptionWithPaymentSheet called');
+    console.log('getPaymentConfirmationConfig called');
     console.log('priceId:', priceId);
     console.log('userId:', userId);
     console.log('plan:', plan);
 
-    // For development: Show confirmation and simulate success after user confirms
-    return new Promise((resolve) => {
-      console.log('Showing confirmation alert...');
-
-      // Use a simpler approach - show alert and wait for response
-      Alert.alert(
-        '💳 Zahlung bestätigen',
-        `Möchtest du das ${plan.name} Abo für ${plan.price}€/${plan.interval} aktivieren?\n\n(Dies ist eine Test-Simulation)`,
-        [
-          {
-            text: 'Abbrechen',
-            style: 'cancel',
-            onPress: () => {
-              console.log('MOCK: User cancelled payment');
-              resolve({
-                success: false,
-                error: 'Zahlung abgebrochen',
-              });
-            },
-          },
-          {
-            text: 'Bestätigen',
-            style: 'default',
-            onPress: () => {
-              console.log('MOCK: User confirmed payment - processing...');
-              // Small delay to simulate processing
-              setTimeout(() => {
-                console.log('MOCK: Payment successful!');
-                resolve({
-                  success: true,
-                  subscriptionId: `mock_sub_${Date.now()}`,
-                  customerId: `mock_cus_${Date.now()}`,
-                });
-              }, 500);
-            },
-          },
-        ],
-        { cancelable: false }
-      );
-    });
+    return {
+      plan,
+      onConfirm: () => {
+        console.log('MOCK: User confirmed payment - processing...');
+        // Small delay to simulate processing
+        setTimeout(() => {
+          console.log('MOCK: Payment successful!');
+          onResult({
+            success: true,
+            subscriptionId: `mock_sub_${Date.now()}`,
+            customerId: `mock_cus_${Date.now()}`,
+          });
+        }, 500);
+      },
+      onCancel: () => {
+        console.log('MOCK: User cancelled payment');
+        onResult({
+          success: false,
+          error: 'Zahlung abgebrochen',
+        });
+      },
+    };
   }
 
-  // Mock subscription cancellation
-  async cancelSubscription(subscriptionId: string): Promise<PaymentResult> {
-    return new Promise((resolve) => {
-      Alert.alert(
-        'Cancel Subscription',
-        'This would cancel your subscription in production. Simulate cancellation?',
-        [
-          {
-            text: 'Keep Subscription',
-            style: 'cancel',
-            onPress: () => {
-              resolve({
-                success: false,
-                error: 'Cancellation aborted',
-              });
-            },
-          },
-          {
-            text: 'Simulate Cancellation',
-            style: 'destructive',
-            onPress: () => {
-              setTimeout(() => {
-                resolve({
-                  success: true,
-                });
-              }, 800);
-            },
-          },
-        ]
-      );
+  // Returns the config for showing a cancellation confirmation dialog
+  getCancellationConfirmationConfig(
+    subscriptionId: string,
+    premiumExpiresAt: number | undefined,
+    onResult: (result: PaymentResult) => void
+  ): CancellationConfirmationConfig {
+    // Calculate the end date for display
+    const expiryDate = premiumExpiresAt
+      ? new Date(premiumExpiresAt).toLocaleDateString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      : 'unbekannt';
+
+    return {
+      expiryDate,
+      onConfirm: () => {
+        console.log('MOCK: User confirmed cancellation');
+        setTimeout(() => {
+          console.log('MOCK: Cancellation successful!');
+          onResult({
+            success: true,
+            cancelAt: premiumExpiresAt,
+          });
+        }, 500);
+      },
+      onCancel: () => {
+        console.log('MOCK: User kept subscription');
+        onResult({
+          success: false,
+          error: 'Kündigung abgebrochen',
+        });
+      },
+    };
+  }
+
+  // Format expiry date helper
+  formatExpiryDate(timestamp: number | undefined): string {
+    if (!timestamp) return 'unbekannt';
+    return new Date(timestamp).toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
     });
   }
 }

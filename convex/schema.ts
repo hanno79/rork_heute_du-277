@@ -41,6 +41,10 @@ export default defineSchema({
     premiumExpiresAt: v.optional(v.number()),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
+    // Subscription management fields
+    stripeSubscriptionStatus: v.optional(v.string()), // "active", "canceled", "past_due"
+    subscriptionCanceledAt: v.optional(v.number()),   // Timestamp when user canceled
+    subscriptionPlan: v.optional(v.string()),         // "monthly" or "yearly"
   })
     .index("by_userId", ["userId"])
     .index("by_email", ["email"])
@@ -77,4 +81,75 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_and_date", ["userId", "shownAt"])
     .index("by_user_and_quote", ["userId", "quoteId"]),
+
+  // Search categories (Stammdaten)
+  searchCategories: defineTable({
+    name: v.string(), // "relationship", "work", "family", "health", "grief", "motivation", "conflict"
+    displayName_de: v.string(), // "Beziehung"
+    displayName_en: v.string(), // "Relationship"
+    keywords_de: v.array(v.string()), // ["partner", "liebe", "ehe", "freundschaft"]
+    keywords_en: v.array(v.string()), // ["partner", "love", "marriage", "friendship"]
+  }).index("by_name", ["name"]),
+
+  // Search contexts (stores search queries with their context)
+  searchContexts: defineTable({
+    searchQuery: v.string(), // Original search query ("Streit mit Partner")
+    normalizedQuery: v.string(), // Normalized for matching
+    categoryId: v.optional(v.id("searchCategories")), // Category (AI-determined or keyword-matched)
+    language: v.string(), // "de" or "en"
+    searchCount: v.number(), // How often was this searched?
+    createdAt: v.number(), // Timestamp
+    lastUsedAt: v.number(), // Last access
+  })
+    .index("by_normalized_query", ["normalizedQuery", "language"])
+    .index("by_category", ["categoryId"])
+    .index("by_language", ["language"])
+    .searchIndex("search_query", { searchField: "searchQuery" }),
+
+  // Quote-Context mappings (Many-to-Many)
+  quoteContextMappings: defineTable({
+    quoteId: v.id("quotes"), // Reference to quote
+    contextId: v.id("searchContexts"), // Reference to search context
+    relevanceScore: v.number(), // How relevant is the quote (0-100)
+    isAiGenerated: v.boolean(), // Was this result AI-generated?
+    createdAt: v.number(),
+  })
+    .index("by_quote", ["quoteId"])
+    .index("by_context", ["contextId"])
+    .index("by_context_relevance", ["contextId", "relevanceScore"]),
+
+  // User search limits (Rate-Limiting)
+  userSearchLimits: defineTable({
+    date: v.string(), // "2026-01-14" (date string)
+    userId: v.string(), // User ID
+    aiSearchCount: v.number(), // Number of AI generations today
+    lastSearchAt: v.number(), // Last search timestamp
+  }).index("by_user_date", ["userId", "date"]),
+
+  // User search history (tracks which searches a user performed)
+  userSearchHistory: defineTable({
+    userId: v.string(),
+    searchContextId: v.id("searchContexts"),
+    searchedAt: v.number(), // Timestamp when the search was performed
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_and_date", ["userId", "searchedAt"]),
+
+  // Global daily quotes (one quote per day per language for ALL users)
+  dailyQuotes: defineTable({
+    date: v.string(), // "2026-01-14" (ISO date string)
+    quoteId: v.id("quotes"), // Reference to the quote
+    language: v.string(), // "de" or "en"
+    selectedAt: v.number(), // Timestamp when selected
+  })
+    .index("by_date_language", ["date", "language"])
+    .index("by_language", ["language"]),
+
+  // Synonym groups for semantic search matching
+  // Allows finding quotes via related terms (e.g., "Liebeskummer" ≈ "Trennung" ≈ "Herzschmerz")
+  synonymGroups: defineTable({
+    groupName: v.string(), // Unique identifier, e.g., "heartbreak"
+    terms_de: v.array(v.string()), // German synonyms: ["liebeskummer", "herzschmerz", "trennung"]
+    terms_en: v.array(v.string()), // English synonyms: ["heartbreak", "breakup", "heartache"]
+  }).index("by_groupName", ["groupName"]),
 });

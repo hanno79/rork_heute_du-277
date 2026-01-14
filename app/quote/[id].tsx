@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Share, Platform, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Share, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Share2, ArrowLeft, Heart } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import colors from '@/constants/colors';
 import typography from '@/constants/typography';
 import useLanguage from '@/hooks/useLanguage';
 import { useFavorites } from '@/hooks/useFavorites';
+import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
 export default function QuoteDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -16,6 +17,7 @@ export default function QuoteDetailScreen() {
   const { isFavorite, toggleFavorite } = useFavorites();
   const [isToggling, setIsToggling] = useState<boolean>(false);
   const router = useRouter();
+  const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   // Get quote from Convex
   const quoteData = useQuery(api.quotes.getQuoteById, { quoteId: id as any });
@@ -76,31 +78,35 @@ Shared from ${t('appName')}`,
 
       if (result.requiresLogin) {
         // User is not logged in
-        if (Platform.OS !== 'web') {
-          Alert.alert(
-            t('loginRequiredForFavorites'),
-            t('loginRequiredMessage'),
-            [
-              {
-                text: t('cancelButton'),
-                style: 'cancel',
+        showAlert(
+          t('loginRequiredForFavorites'),
+          t('loginRequiredMessage'),
+          [
+            {
+              text: t('cancelButton'),
+              style: 'cancel',
+              onPress: () => {},
+            },
+            {
+              text: t('loginButton'),
+              onPress: () => {
+                router.push('/auth/login');
               },
-              {
-                text: t('loginButton'),
-                onPress: () => {
-                  router.push('/auth/login');
-                },
-              },
-            ]
-          );
-        }
+            },
+          ],
+          '🔐'
+        );
       } else if (result.success) {
         // Successfully added/removed favorite
         const message = result.wasAdded ? t('addedToFavorites') : t('removedFromFavorites');
+        const icon = result.wasAdded ? '❤️' : '💔';
 
-        if (Platform.OS !== 'web') {
-          Alert.alert('', message);
-        }
+        showAlert(
+          'Favorit',
+          message,
+          [{ text: 'OK', onPress: () => {} }],
+          icon
+        );
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
@@ -228,6 +234,7 @@ Shared from ${t('appName')}`,
           </View>
         )}
       </ScrollView>
+      <AlertComponent />
     </SafeAreaView>
   );
 }
