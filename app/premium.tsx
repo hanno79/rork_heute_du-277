@@ -11,6 +11,8 @@ import useLanguage from '@/hooks/useLanguage';
 import { useMockStripeService } from '@/services/mockStripeService';
 import { SUBSCRIPTION_PLANS, formatPrice, STRIPE_PUBLISHABLE_KEY } from '@/lib/stripe';
 import { useAuth } from '@/providers/AuthProvider';
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 // Check if running in Expo Go
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
@@ -36,12 +38,41 @@ if (Platform.OS !== 'web' && !isExpoGo) {
 }
 
 export default function PremiumScreen() {
-  const { isPremium, setIsPremium } = useSubscription();
+  // NOTE: We use Convex as the ONLY source of truth for premium status
+  const { setIsPremium, clearCache } = useSubscription();
   const { t } = useLanguage();
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
+
+  // Convex mutation to update premium status
+  const updatePremiumStatus = useMutation(api.auth.updatePremiumStatus);
+
+  // Query user's actual premium status from Convex - THIS IS THE SOURCE OF TRUTH
+  const userProfile = useQuery(
+    api.auth.getCurrentUser,
+    user?.id ? { userId: user.id } : "skip"
+  );
+
+  // Clear old cache and log status on mount
+  React.useEffect(() => {
+    clearCache();
+    console.log('=== PREMIUM SCREEN MOUNTED ===');
+    console.log('User ID:', user?.id);
+    console.log('UserProfile from Convex:', userProfile);
+    console.log('isPremium from Convex:', userProfile?.isPremium);
+  }, []);
+
+  // Log when userProfile updates
+  React.useEffect(() => {
+    if (userProfile !== undefined) {
+      console.log('Convex userProfile updated:', userProfile?.isPremium);
+    }
+  }, [userProfile]);
+
+  // Use Convex status as THE ONLY source of truth
+  const actualIsPremium = userProfile?.isPremium === true;
 
   // Initialize Stripe service
   let stripeService: any = null;
@@ -112,6 +143,12 @@ export default function PremiumScreen() {
         throw new Error('Plan not found');
       }
 
+      console.log('=== PREMIUM PURCHASE DEBUG ===');
+      console.log('User ID:', user.id);
+      console.log('Plan:', plan);
+      console.log('Stripe Available:', stripeAvailable);
+      console.log('Is Expo Go:', isExpoGo);
+
       let result;
 
       if (stripeAvailable) {
@@ -137,21 +174,47 @@ export default function PremiumScreen() {
         }
       } else {
         // Use mock Stripe service for development/Expo Go
+        console.log('Using MOCK Stripe service - should show Alert dialog');
         result = await mockStripeService.handleSubscriptionWithPaymentSheet(
           plan.priceId,
           user.id,
           plan
         );
+        console.log('Mock service result:', result);
       }
 
+      console.log('Payment result:', result);
+
       if (result.success) {
+        console.log('Payment successful, updating Convex...');
+        // Update premium status in Convex database
+        const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
+        const expiresAt = Date.now() + (plan?.interval === 'year' ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
+
+        try {
+          console.log('Calling updatePremiumStatus with userId:', user.id);
+          await updatePremiumStatus({
+            userId: user.id,
+            isPremium: true,
+            stripeCustomerId: result.customerId,
+            stripeSubscriptionId: result.subscriptionId,
+            premiumExpiresAt: expiresAt,
+          });
+          console.log('Convex update successful!');
+        } catch (convexError) {
+          console.error('Convex update FAILED:', convexError);
+        }
+
+        // Update local state
         setIsPremium(true);
+
         Alert.alert(
           t('success'),
           t('subscriptionActivated'),
           [{ text: t('ok'), onPress: () => router.back() }]
         );
       } else {
+        console.log('Payment failed or cancelled:', result.error);
         Alert.alert(t('error'), result.error || t('paymentFailed'));
       }
     } catch (error) {
@@ -197,8 +260,36 @@ export default function PremiumScreen() {
           {!stripeAvailable && (
             <View style={styles.developmentBanner}>
               <Text style={styles.developmentText}>
-                🧪 Development Mode - Payment Simulation
+                🧪 Development Mode
               </Text>
+              <Text style={styles.developmentText}>
+                Status: {userProfile === undefined ? '⏳ Laden...' : (actualIsPremium ? '✅ Premium' : '❌ Kein Premium')}
+              </Text>
+              {!actualIsPremium && user?.id && (
+                <TouchableOpacity
+                  style={{ backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, marginTop: 12 }}
+                  onPress={async () => {
+                    console.log('=== DIRECT PREMIUM ACTIVATION ===');
+                    console.log('User ID:', user.id);
+                    try {
+                      await updatePremiumStatus({
+                        userId: user.id,
+                        isPremium: true,
+                        premiumExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+                      });
+                      console.log('Premium activated successfully!');
+                      Alert.alert('Erfolg', 'Premium wurde aktiviert!');
+                    } catch (error) {
+                      console.error('Failed to activate premium:', error);
+                      Alert.alert('Fehler', 'Premium konnte nicht aktiviert werden: ' + String(error));
+                    }
+                  }}
+                >
+                  <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+                    🎁 Premium DIREKT aktivieren (Test)
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -231,15 +322,15 @@ export default function PremiumScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.subscribeButton, (isPremium || isLoading) && styles.subscribeButtonDisabled]}
+            style={[styles.subscribeButton, (actualIsPremium || isLoading) && styles.subscribeButtonDisabled]}
             onPress={handleSubscribe}
-            disabled={isPremium || isLoading}
+            disabled={actualIsPremium || isLoading}
           >
             {isLoading ? (
               <Loader2 size={20} color="white" style={styles.loadingIcon} />
             ) : (
               <Text style={styles.subscribeButtonText}>
-                {isPremium ? t('alreadySubscribed') : t('subscribeNow')}
+                {actualIsPremium ? t('alreadySubscribed') : t('subscribeNow')}
               </Text>
             )}
           </TouchableOpacity>

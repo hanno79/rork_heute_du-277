@@ -3,29 +3,33 @@ import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Share, Platform, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Share2, ArrowLeft, Heart } from 'lucide-react-native';
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import colors from '@/constants/colors';
 import typography from '@/constants/typography';
-import useQuotes from '@/hooks/useQuotes';
 import useLanguage from '@/hooks/useLanguage';
 import { useFavorites } from '@/hooks/useFavorites';
 
 export default function QuoteDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { getQuoteById } = useQuotes();
   const { t, currentLanguage } = useLanguage();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [isToggling, setIsToggling] = useState<boolean>(false);
   const router = useRouter();
-  
-  const quote = getQuoteById(id as string);
-  
-  if (!quote) {
+
+  // Get quote from Convex
+  const quoteData = useQuery(api.quotes.getQuoteById, { quoteId: id as any });
+
+  if (!quoteData) {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={typography.body}>{t('quoteNotFound')}</Text>
       </SafeAreaView>
     );
   }
+
+  // Apply localization
+  const quote = quoteData;
 
   // Get localized content
   const localizedQuote = quote.translations[currentLanguage];

@@ -5,21 +5,28 @@ import { Stack, router } from 'expo-router';
 import { Crown, Settings, BookOpen, Share2, Globe, LogOut, User } from 'lucide-react-native';
 import colors from '@/constants/colors';
 import typography from '@/constants/typography';
-import useSubscription from '@/hooks/useSubscription';
 import useLanguage from '@/hooks/useLanguage';
 import useNotifications from '@/hooks/useNotifications';
 import NotificationSettings from '@/components/NotificationSettings';
 import { SupportedLanguage } from '@/constants/translations';
 import { useAuth } from '@/providers/AuthProvider';
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 export default function ProfileScreen() {
-  const { isPremium, setIsPremium } = useSubscription();
   const { t, currentLanguage, setLanguage } = useLanguage();
   const { settings, capabilities, toggleEnabled } = useNotifications();
   const [showNotificationSettings, setShowNotificationSettings] = useState<boolean>(false);
   const { user, isAuthenticated, logout } = useAuth();
 
-  const togglePremium = () => {
+  // Query premium status from Convex - this is the source of truth
+  const userProfile = useQuery(
+    api.auth.getCurrentUser,
+    user?.id ? { userId: user.id } : "skip"
+  );
+  const isPremium = userProfile?.isPremium === true;
+
+  const handlePremiumPress = () => {
     if (!isAuthenticated) {
       Alert.alert(
         'Anmeldung erforderlich',
@@ -31,7 +38,8 @@ export default function ProfileScreen() {
       );
       return;
     }
-    setIsPremium(!isPremium);
+    // Navigate to the Premium page for proper payment flow
+    router.push('/premium');
   };
 
   const handleLogout = async () => {
@@ -147,12 +155,12 @@ export default function ProfileScreen() {
                 : t('freeVersionDescription')}
             </Text>
             
-            <TouchableOpacity 
-              style={[styles.subscriptionButton, isPremium && styles.cancelButton]} 
-              onPress={togglePremium}
+            <TouchableOpacity
+              style={[styles.subscriptionButton, isPremium && styles.cancelButton]}
+              onPress={handlePremiumPress}
             >
               <Text style={[styles.buttonText, isPremium && styles.cancelButtonText]}>
-                {isPremium ? t('cancelPremium') : t('upgradeToPremium')}
+                {isPremium ? t('managePremium') : t('upgradeToPremium')}
               </Text>
             </TouchableOpacity>
           </View>

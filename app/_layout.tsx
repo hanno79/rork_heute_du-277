@@ -6,12 +6,16 @@ import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Platform } from "react-native";
 import Constants from 'expo-constants';
+import { ConvexProvider, ConvexReactClient } from "convex/react";
 
 import colors from "@/constants/colors";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { AuthProvider } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { STRIPE_PUBLISHABLE_KEY, initializeStripe } from "@/lib/stripe";
+
+// Initialize Convex client
+const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
 // Check if running in Expo Go
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
@@ -82,34 +86,36 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const AppContent = () => (
-    <AuthProvider>
-      <FavoritesProvider>
-        <StatusBar
-          style="dark"
-          backgroundColor={colors.background}
-        />
-        <Stack
-          screenOptions={{
-            headerBackTitle: "Back",
-            headerStyle: {
-              backgroundColor: colors.background,
-            },
-            headerTintColor: colors.text,
-            contentStyle: {
-              backgroundColor: colors.background,
-            },
-          }}
-        >
-          <Stack.Screen name="test" options={{ headerShown: true, title: "Test" }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="premium" options={{ presentation: "card" }} />
-          <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
-          <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
-          <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
-          <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
-        </Stack>
-      </FavoritesProvider>
-    </AuthProvider>
+    <ConvexProvider client={convex}>
+      <AuthProvider>
+        <FavoritesProvider>
+          <StatusBar
+            style="dark"
+            backgroundColor={colors.background}
+          />
+          <Stack
+            screenOptions={{
+              headerBackTitle: "Back",
+              headerStyle: {
+                backgroundColor: colors.background,
+              },
+              headerTintColor: colors.text,
+              contentStyle: {
+                backgroundColor: colors.background,
+              },
+            }}
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="test" options={{ headerShown: true, title: "Test" }} />
+            <Stack.Screen name="premium" options={{ presentation: "card" }} />
+            <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
+            <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
+            <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
+          </Stack>
+        </FavoritesProvider>
+      </AuthProvider>
+    </ConvexProvider>
   );
 
   return (

@@ -5,6 +5,7 @@ export interface PaymentResult {
   success: boolean;
   error?: string;
   subscriptionId?: string;
+  customerId?: string;
 }
 
 // Mock Stripe service for development/testing
@@ -15,47 +16,50 @@ export class MockStripeService {
     userId: string,
     plan: SubscriptionPlan
   ): Promise<PaymentResult> {
+    console.log('=== MOCK STRIPE SERVICE ===');
+    console.log('handleSubscriptionWithPaymentSheet called');
+    console.log('priceId:', priceId);
+    console.log('userId:', userId);
+    console.log('plan:', plan);
+
+    // For development: Show confirmation and simulate success after user confirms
     return new Promise((resolve) => {
-      // Show payment simulation dialog
+      console.log('Showing confirmation alert...');
+
+      // Use a simpler approach - show alert and wait for response
       Alert.alert(
-        '💳 Stripe Payment Simulation',
-        `Plan: ${plan.name}\nPrice: ${plan.price}€/${plan.interval}\n\nThis is a development simulation. In production, this would open the real Stripe payment sheet.`,
+        '💳 Zahlung bestätigen',
+        `Möchtest du das ${plan.name} Abo für ${plan.price}€/${plan.interval} aktivieren?\n\n(Dies ist eine Test-Simulation)`,
         [
           {
-            text: 'Cancel Payment',
+            text: 'Abbrechen',
             style: 'cancel',
             onPress: () => {
+              console.log('MOCK: User cancelled payment');
               resolve({
                 success: false,
-                error: 'Payment cancelled by user',
+                error: 'Zahlung abgebrochen',
               });
             },
           },
           {
-            text: 'Simulate Success',
+            text: 'Bestätigen',
+            style: 'default',
             onPress: () => {
-              // Simulate processing delay
+              console.log('MOCK: User confirmed payment - processing...');
+              // Small delay to simulate processing
               setTimeout(() => {
+                console.log('MOCK: Payment successful!');
                 resolve({
                   success: true,
                   subscriptionId: `mock_sub_${Date.now()}`,
+                  customerId: `mock_cus_${Date.now()}`,
                 });
-              }, 1500);
+              }, 500);
             },
           },
-          {
-            text: 'Simulate Failure',
-            style: 'destructive',
-            onPress: () => {
-              setTimeout(() => {
-                resolve({
-                  success: false,
-                  error: 'Your card was declined. Please try a different payment method.',
-                });
-              }, 1000);
-            },
-          },
-        ]
+        ],
+        { cancelable: false }
       );
     });
   }

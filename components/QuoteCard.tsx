@@ -20,9 +20,11 @@ export default function QuoteCard({ quote, compact = false }: QuoteCardProps) {
   const [isToggling, setIsToggling] = useState<boolean>(false);
 
   const handlePress = () => {
+    // Use Convex _id if available, fallback to id for old mock data
+    const quoteId = (quote as any)._id || quote.id;
     router.push({
       pathname: '/quote/[id]',
-      params: { id: quote.id }
+      params: { id: quoteId }
     });
   };
 
