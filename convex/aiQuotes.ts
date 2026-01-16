@@ -2,7 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 
-// Generate new quote with AI
+// Generate new quote with AI - BILINGUAL (English + German)
 export const generateQuote = action({
   args: {
     language: v.string(),
@@ -14,36 +14,45 @@ export const generateQuote = action({
       throw new Error("OPENROUTER_API_KEY not configured");
     }
 
-    const langName = args.language === "de" ? "German" : "English";
     const promptContext = args.searchQuery
       ? `for the search query: "${args.searchQuery}"`
       : "that is meaningful and inspiring";
 
-    // IMPORTANT: Emphasize that ALL content must be in the target language
-    const languageInstruction = args.language === "de"
-      ? "WICHTIG: Alle Felder (text, context, explanation, situations, tags) MÜSSEN auf Deutsch sein!"
-      : "IMPORTANT: All fields (text, context, explanation, situations, tags) MUST be in English!";
-
+    // BILINGUAL PROMPT: Generate quote in BOTH English and German
     const prompt = `Generate a meaningful and inspiring quote, Bible verse, or saying ${promptContext}.
 
+IMPORTANT: Provide the quote in BOTH English AND German in a single response.
+
 Requirements:
-- Language: ${langName}
-- ${languageInstruction}
 - Must be authentic (real quote from known person, actual Bible verse, or traditional saying)
 - Include proper attribution/reference
-- Provide context and explanation IN ${langName.toUpperCase()}
+- Provide context and explanation in BOTH languages
 
 Respond with ONLY a valid JSON object (no markdown):
 {
-  "text": "The quote text in ${langName}",
-  "reference": "Author name or Bible reference (e.g., 'Sprüche 3:5' for German, 'Proverbs 3:5' for English)",
-  "author": "Author name if it's a quote (optional, null for Bible verses)",
-  "type": "bible" | "quote" | "saying" | "poem",
-  "context": "Brief historical or situational context in ${langName} (2-3 sentences)",
-  "explanation": "Why this is meaningful and how to apply it in ${langName} (2-3 sentences)",
-  "situations": ["situation1 in ${langName}", "situation2 in ${langName}", "situation3 in ${langName}"],
-  "tags": ["tag1 in ${langName}", "tag2 in ${langName}", "tag3 in ${langName}"]
-}`;
+  "en": {
+    "text": "The quote text in English",
+    "reference": "Proverbs 3:5",
+    "author": "Author name or null for Bible verses",
+    "type": "bible",
+    "context": "Brief historical or situational context in English (2-3 sentences)",
+    "explanation": "Why this is meaningful and how to apply it in English (2-3 sentences)",
+    "situations": ["situation1", "situation2", "situation3"],
+    "tags": ["tag1", "tag2", "tag3"]
+  },
+  "de": {
+    "text": "Das Zitat auf Deutsch",
+    "reference": "Sprüche 3:5",
+    "author": "Autorenname oder null für Bibelverse",
+    "type": "bible",
+    "context": "Kurzer historischer oder situativer Kontext auf Deutsch (2-3 Sätze)",
+    "explanation": "Warum dies bedeutsam ist und wie man es anwenden kann auf Deutsch (2-3 Sätze)",
+    "situations": ["Situation1", "Situation2", "Situation3"],
+    "tags": ["Schlagwort1", "Schlagwort2", "Schlagwort3"]
+  }
+}
+
+type must be one of: "bible", "quote", "saying", "poem"`;
 
     try {
       const response = await fetch(
@@ -60,7 +69,7 @@ Respond with ONLY a valid JSON object (no markdown):
             model: "anthropic/claude-3-haiku",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.8,
-            max_tokens: 1000,
+            max_tokens: 2000, // Increased for bilingual content
           }),
         }
       );
@@ -85,41 +94,66 @@ Respond with ONLY a valid JSON object (no markdown):
           .trim();
       }
 
-      const quoteData = JSON.parse(jsonStr);
+      const bilingualData = JSON.parse(jsonStr);
 
-      // Save to database - nur gültige Werte übergeben
+      // Determine primary and secondary language based on user's language preference
+      const primaryLang = args.language === "de" ? "de" : "en";
+      const secondaryLang = primaryLang === "de" ? "en" : "de";
+
+      const primaryData = bilingualData[primaryLang];
+      const translationData = bilingualData[secondaryLang];
+
+      if (!primaryData || !primaryData.text) {
+        throw new Error("Missing primary language data in AI response");
+      }
+
+      // Build translations object for the secondary language
+      const translations: any = {};
+      if (translationData && translationData.text) {
+        translations[secondaryLang] = {
+          text: translationData.text,
+          reference: translationData.reference,
+          context: translationData.context,
+          explanation: translationData.explanation,
+          situations: translationData.situations || [],
+          tags: translationData.tags || [],
+        };
+      }
+
+      // Save to database with translations
       const insertData: any = {
-        text: quoteData.text,
+        text: primaryData.text,
         source: "ai_generated",
-        language: args.language,
+        language: primaryLang,
         isPremium: false,
-        situations: quoteData.situations || [],
-        tags: quoteData.tags || [],
+        situations: primaryData.situations || [],
+        tags: primaryData.tags || [],
+        translations,
         aiPrompt: args.searchQuery
           ? `Search: ${args.searchQuery}`
           : "Daily quote generation",
       };
 
-      // Füge optionale Felder nur hinzu wenn sie einen Wert haben
-      if (quoteData.author && quoteData.author !== "null" && quoteData.author !== null) {
-        insertData.author = quoteData.author;
+      // Add optional fields only if they have values
+      if (primaryData.author && primaryData.author !== "null" && primaryData.author !== null) {
+        insertData.author = primaryData.author;
       }
-      if (quoteData.reference) {
-        insertData.reference = quoteData.reference;
+      if (primaryData.reference) {
+        insertData.reference = primaryData.reference;
       }
-      if (quoteData.type) {
-        insertData.category = quoteData.type;
+      if (primaryData.type) {
+        insertData.category = primaryData.type;
       }
-      if (quoteData.context) {
-        insertData.context = quoteData.context;
+      if (primaryData.context) {
+        insertData.context = primaryData.context;
       }
-      if (quoteData.explanation) {
-        insertData.explanation = quoteData.explanation;
+      if (primaryData.explanation) {
+        insertData.explanation = primaryData.explanation;
       }
 
       const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, insertData);
 
-      return { quoteId, quote: quoteData };
+      return { quoteId, quote: primaryData, translations };
     } catch (error: any) {
       console.error("AI generation error:", error);
       throw new Error(`Failed to generate quote: ${error.message}`);
@@ -140,7 +174,7 @@ function normalizeQuery(query: string): string {
     .join(" ");
 }
 
-// Generate multiple quotes for search (Premium feature) - with context saving
+// Generate multiple quotes for search (Premium feature) - BILINGUAL with context saving
 export const generateSearchQuotes = action({
   args: {
     query: v.string(),
@@ -166,34 +200,47 @@ export const generateSearchQuotes = action({
     }
 
     const count = args.count || 3;
-    const langName = args.language === "de" ? "German" : "English";
 
-    // IMPORTANT: Emphasize that ALL content must be in the target language
-    const languageInstruction = args.language === "de"
-      ? "KRITISCH WICHTIG: ALLE Felder (text, context, explanation, situations, tags, relevantQueries) MÜSSEN auf Deutsch sein! Keine englischen Wörter!"
-      : "CRITICAL: ALL fields (text, context, explanation, situations, tags, relevantQueries) MUST be in English!";
-
+    // BILINGUAL PROMPT: Generate quotes in BOTH English and German
     const prompt = `Find ${count} meaningful quotes, Bible verses, or sayings for: "${args.query}"
 
-Language: ${langName}
-${languageInstruction}
+IMPORTANT: For EACH quote, provide BOTH English AND German versions.
 
 Requirements:
 - Authentic quotes with proper attribution, diverse types
-- ALL content must be in ${langName.toUpperCase()} - including context, explanation, situations, tags
-- For EACH quote, provide "relevantQueries" - 3-5 ALTERNATIVE search terms in ${langName.toUpperCase()}
+- Provide BOTH language versions for each quote
+- For EACH quote, provide "relevantQueries" in BOTH languages
 
-Example: If the query is "Liebeskummer" (heartbreak), a quote about healing might also be relevant for "Trennung" (breakup), "Herzschmerz" (heartache), "Loslassen" (letting go).
-
-IMPORTANT: Return ONLY valid JSON, no explanations before or after.
+IMPORTANT: Return ONLY valid JSON array, no explanations before or after.
 
 [
-{"text":"Quote text in ${langName}","reference":"Source","author":"Author or null","type":"quote","context":"Context in ${langName}","explanation":"Explanation in ${langName}","situations":["situation in ${langName}","situation2"],"tags":["tag in ${langName}","tag2"],"relevanceScore":85,"relevantQueries":["search term in ${langName}","term2","term3"]}
+  {
+    "en": {
+      "text": "Quote in English",
+      "reference": "Proverbs 3:5",
+      "author": "Author or null",
+      "type": "quote",
+      "context": "English context (2-3 sentences)",
+      "explanation": "English explanation (2-3 sentences)",
+      "situations": ["situation1", "situation2"],
+      "tags": ["tag1", "tag2"],
+      "relevantQueries": ["heartbreak", "sadness", "healing"]
+    },
+    "de": {
+      "text": "Zitat auf Deutsch",
+      "reference": "Sprüche 3:5",
+      "context": "Deutscher Kontext (2-3 Sätze)",
+      "explanation": "Deutsche Erklärung (2-3 Sätze)",
+      "situations": ["Situation1", "Situation2"],
+      "tags": ["Schlagwort1", "Schlagwort2"],
+      "relevantQueries": ["Liebeskummer", "Traurigkeit", "Heilung"]
+    },
+    "relevanceScore": 85
+  }
 ]
 
 Types: "bible", "quote", "saying", "poem"
-relevanceScore: 0-100 based on match quality
-relevantQueries: 3-5 alternative search terms in ${langName} that would also match this quote`;
+relevanceScore: 0-100 based on match quality`;
 
     try {
       const response = await fetch(
@@ -321,10 +368,16 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
       }
       const rawQuotes = Array.isArray(quotesData) ? quotesData : [quotesData];
 
-      // Validiere und filtere gültige Quotes
+      // Determine primary and secondary language
+      const primaryLang = args.language === "de" ? "de" : "en";
+      const secondaryLang = primaryLang === "de" ? "en" : "de";
+
+      // Validate and filter valid bilingual quotes
       const quotes = rawQuotes.filter((q: any) => {
         if (!q || typeof q !== 'object') return false;
-        if (!q.text || typeof q.text !== 'string' || q.text.length < 10) return false;
+        // Check for bilingual structure
+        const primary = q[primaryLang];
+        if (!primary || !primary.text || typeof primary.text !== 'string' || primary.text.length < 10) return false;
         return true;
       });
 
@@ -332,7 +385,7 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
         throw new Error("No valid quotes in AI response");
       }
 
-      // Save search context first
+      // Save search context first (for primary language)
       const normalizedQuery = normalizeQuery(args.query);
       const contextId = await ctx.runMutation(api.search.saveSearchContext, {
         searchQuery: args.query,
@@ -344,32 +397,49 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
       // In DB speichern and create mappings
       const savedQuotes = [];
       for (const q of quotes) {
-        // Bereite die Daten vor - undefined statt null für optionale Felder
+        const primary = q[primaryLang];
+        const secondary = q[secondaryLang];
+
+        // Build translations object for the secondary language
+        const translations: any = {};
+        if (secondary && secondary.text) {
+          translations[secondaryLang] = {
+            text: secondary.text,
+            reference: secondary.reference,
+            context: secondary.context,
+            explanation: secondary.explanation,
+            situations: secondary.situations || [],
+            tags: secondary.tags || [],
+          };
+        }
+
+        // Prepare primary language data
         const quoteData: any = {
-          text: q.text,
+          text: primary.text,
           source: "ai_generated",
-          language: args.language,
+          language: primaryLang,
           isPremium: false,
-          situations: q.situations || [],
-          tags: [...(q.tags || []), args.query.toLowerCase()],
+          situations: primary.situations || [],
+          tags: [...(primary.tags || []), args.query.toLowerCase()],
+          translations,
           aiPrompt: `Search: ${args.query}`,
         };
 
-        // Füge optionale Felder nur hinzu wenn sie einen Wert haben
-        if (q.author && q.author !== "null" && q.author !== null) {
-          quoteData.author = q.author;
+        // Add optional fields only if they have values
+        if (primary.author && primary.author !== "null" && primary.author !== null) {
+          quoteData.author = primary.author;
         }
-        if (q.reference) {
-          quoteData.reference = q.reference;
+        if (primary.reference) {
+          quoteData.reference = primary.reference;
         }
-        if (q.type) {
-          quoteData.category = q.type;
+        if (primary.type) {
+          quoteData.category = primary.type;
         }
-        if (q.context) {
-          quoteData.context = q.context;
+        if (primary.context) {
+          quoteData.context = primary.context;
         }
-        if (q.explanation) {
-          quoteData.explanation = q.explanation;
+        if (primary.explanation) {
+          quoteData.explanation = primary.explanation;
         }
 
         const quoteId = await ctx.runMutation(api.quotes.insertAIQuote, quoteData);
@@ -383,32 +453,54 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
         });
 
         // Create additional context mappings for relevantQueries (multi-context support)
-        // This allows the same quote to be found via related search terms
-        if (q.relevantQueries && Array.isArray(q.relevantQueries)) {
-          for (const relatedQuery of q.relevantQueries) {
+        // Process relevantQueries from PRIMARY language
+        if (primary.relevantQueries && Array.isArray(primary.relevantQueries)) {
+          for (const relatedQuery of primary.relevantQueries) {
             if (typeof relatedQuery === 'string' && relatedQuery.trim().length > 0) {
               const relatedNormalized = normalizeQuery(relatedQuery);
 
-              // Create or get context for this related query
               const relatedContextId = await ctx.runMutation(api.search.saveSearchContext, {
                 searchQuery: relatedQuery.trim(),
                 normalizedQuery: relatedNormalized,
                 categoryId: args.categoryId,
-                language: args.language,
+                language: primaryLang,
               });
 
-              // Map the quote to this related context with slightly lower relevance
               await ctx.runMutation(api.search.addQuoteContextMapping, {
                 quoteId,
                 contextId: relatedContextId,
-                relevanceScore: Math.max(50, (q.relevanceScore || 80) - 10), // Slightly lower score for related queries
+                relevanceScore: Math.max(50, (q.relevanceScore || 80) - 10),
                 isAiGenerated: true,
               });
             }
           }
         }
 
-        savedQuotes.push({ _id: quoteId, ...q, relevanceScore: q.relevanceScore || 80 });
+        // Also create context mappings for SECONDARY language relevantQueries
+        // This enables cross-language search
+        if (secondary?.relevantQueries && Array.isArray(secondary.relevantQueries)) {
+          for (const relatedQuery of secondary.relevantQueries) {
+            if (typeof relatedQuery === 'string' && relatedQuery.trim().length > 0) {
+              const relatedNormalized = normalizeQuery(relatedQuery);
+
+              const relatedContextId = await ctx.runMutation(api.search.saveSearchContext, {
+                searchQuery: relatedQuery.trim(),
+                normalizedQuery: relatedNormalized,
+                categoryId: args.categoryId,
+                language: secondaryLang,
+              });
+
+              await ctx.runMutation(api.search.addQuoteContextMapping, {
+                quoteId,
+                contextId: relatedContextId,
+                relevanceScore: Math.max(50, (q.relevanceScore || 80) - 15), // Slightly lower for cross-language
+                isAiGenerated: true,
+              });
+            }
+          }
+        }
+
+        savedQuotes.push({ _id: quoteId, ...primary, translations, relevanceScore: q.relevanceScore || 80 });
       }
 
       // Increment AI search count and record search history

@@ -140,7 +140,7 @@ export const recordQuoteHistory = mutation({
   },
 });
 
-// Search quotes
+// Search quotes - with bilingual translation support
 export const searchQuotes = query({
   args: {
     query: v.string(),
@@ -149,7 +149,7 @@ export const searchQuotes = query({
   handler: async (ctx, args) => {
     const searchTerm = args.query.toLowerCase();
 
-    // Get all quotes for the language
+    // Get all quotes (no language filter - we search all and their translations)
     const quotes = await ctx.db.query("quotes").collect();
 
     const results = quotes.filter((quote) => {
@@ -167,6 +167,26 @@ export const searchQuotes = query({
         s.toLowerCase().includes(searchTerm)
       );
 
+      // NEW: Search in translations for bilingual support
+      let translationMatch = false;
+      if (quote.translations && typeof quote.translations === 'object') {
+        for (const lang of Object.keys(quote.translations)) {
+          const t = (quote.translations as any)[lang];
+          if (t && typeof t === 'object') {
+            if (
+              t.text?.toLowerCase().includes(searchTerm) ||
+              t.context?.toLowerCase().includes(searchTerm) ||
+              t.explanation?.toLowerCase().includes(searchTerm) ||
+              t.tags?.some((tag: string) => tag.toLowerCase().includes(searchTerm)) ||
+              t.situations?.some((s: string) => s.toLowerCase().includes(searchTerm))
+            ) {
+              translationMatch = true;
+              break;
+            }
+          }
+        }
+      }
+
       return (
         matchText ||
         matchContext ||
@@ -174,7 +194,8 @@ export const searchQuotes = query({
         matchAuthor ||
         matchReference ||
         matchTags ||
-        matchSituations
+        matchSituations ||
+        translationMatch
       );
     });
 
@@ -322,6 +343,7 @@ export const getQuoteById = query({
 });
 
 // Insert AI-generated quote (called from actions)
+// Now supports bilingual quotes with translations
 export const insertAIQuote = mutation({
   args: {
     text: v.string(),
@@ -336,6 +358,7 @@ export const insertAIQuote = mutation({
     situations: v.optional(v.array(v.string())),
     tags: v.optional(v.array(v.string())),
     aiPrompt: v.optional(v.string()),
+    translations: v.optional(v.any()), // Bilingual translations object
   },
   handler: async (ctx, args) => {
     // Build the document object, only including optional fields if they have values
@@ -347,7 +370,7 @@ export const insertAIQuote = mutation({
       isPremium: args.isPremium,
       situations: args.situations || [],
       tags: args.tags || [],
-      translations: {},
+      translations: args.translations || {}, // Use provided translations or empty object
       reflectionQuestions: [],
       practicalTips: [],
     };

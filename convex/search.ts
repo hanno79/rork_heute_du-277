@@ -584,6 +584,26 @@ export const smartSearch = query({
         s.toLowerCase().includes(searchTerm)
       );
 
+      // NEW: Search in translations for bilingual support
+      let translationMatch = false;
+      if (quote.translations && typeof quote.translations === 'object') {
+        for (const lang of Object.keys(quote.translations)) {
+          const t = quote.translations[lang];
+          if (t && typeof t === 'object') {
+            if (
+              t.text?.toLowerCase().includes(searchTerm) ||
+              t.context?.toLowerCase().includes(searchTerm) ||
+              t.explanation?.toLowerCase().includes(searchTerm) ||
+              t.tags?.some((tag: string) => tag.toLowerCase().includes(searchTerm)) ||
+              t.situations?.some((s: string) => s.toLowerCase().includes(searchTerm))
+            ) {
+              translationMatch = true;
+              break;
+            }
+          }
+        }
+      }
+
       // Also check individual keywords (using expanded keywords with synonyms)
       const keywordMatch = allKeywords.some((keyword) => {
         return (
@@ -600,6 +620,7 @@ export const smartSearch = query({
         matchAuthor ||
         matchTags ||
         matchSituations ||
+        translationMatch ||
         keywordMatch
       );
     });
