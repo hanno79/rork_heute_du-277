@@ -36,6 +36,26 @@ interface AuthActions {
   refreshAuth: () => Promise<void>;
 }
 
+// Type-safe interface for user profile data returned from Convex auth mutations
+interface ConvexUserProfile {
+  userId: string;
+  id?: string;  // Alternative ID field
+  email: string;
+  name: string;
+  isPremium?: boolean;
+  _creationTime?: number;
+}
+
+// Type-safe interface for Convex login/register response
+// Matches the shape returned by api.auth.login and api.auth.register
+interface AuthResponse {
+  success: boolean;
+  error?: string;
+  user?: ConvexUserProfile;
+  sessionToken?: string;
+  sessionExpiresAt?: number;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -116,8 +136,8 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     }
 
     try {
-      // Call Convex login
-      const result = await loginMutation({ email, password });
+      // Call Convex login and cast to typed response
+      const result = await loginMutation({ email, password }) as AuthResponse;
 
       // Check if Convex returned an error
       if (!result.success) {
@@ -130,28 +150,28 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
       // Login successful - process user data
       if (result.user) {
-        const userId = (result.user as any).userId || (result.user as any).id;
-        const creationTime = (result.user as any)._creationTime;
+        const userProfile = result.user;
+        const userId = userProfile.userId || userProfile.id || '';
+        const creationTime = userProfile._creationTime;
 
         const user: User = {
           id: userId,
-          email: (result.user as any).email,
-          name: (result.user as any).name,
-          isPremium: (result.user as any).isPremium || false,
+          email: userProfile.email,
+          name: userProfile.name,
+          isPremium: userProfile.isPremium || false,
           createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
           updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
         };
 
         // SECURITY: Use server-generated session token instead of client-side generation
-        const resultAny = result as any;
-        if (!resultAny.sessionToken || !resultAny.sessionExpiresAt) {
+        if (!result.sessionToken || !result.sessionExpiresAt) {
           setAuthState(prev => ({ ...prev, isLoading: false }));
           return { success: false, error: 'Server-Authentifizierung fehlgeschlagen' };
         }
 
         const tokens: AuthTokens = {
-          sessionToken: resultAny.sessionToken,
-          expiresAt: resultAny.sessionExpiresAt,
+          sessionToken: result.sessionToken,
+          expiresAt: result.sessionExpiresAt,
         };
 
         await saveAuthData(user, tokens);
@@ -162,10 +182,10 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       // Extract meaningful error message
-      const errorMessage = error?.message || error?.toString() || 'Login fehlgeschlagen';
+      const errorMessage = error instanceof Error ? error.message : 'Login fehlgeschlagen';
       return {
         success: false,
         error: errorMessage
@@ -187,8 +207,8 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     }
 
     try {
-      // Call Convex registration
-      const result = await registerMutation({ email, password, name });
+      // Call Convex registration and cast to typed response
+      const result = await registerMutation({ email, password, name }) as AuthResponse;
 
       // Check if Convex returned an error
       if (!result.success) {
@@ -201,28 +221,28 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
       // Registration successful - process user data
       if (result.user) {
-        const userId = (result.user as any).userId || (result.user as any).id;
-        const creationTime = (result.user as any)._creationTime;
+        const userProfile = result.user;
+        const userId = userProfile.userId || userProfile.id || '';
+        const creationTime = userProfile._creationTime;
 
         const user: User = {
           id: userId,
-          email: (result.user as any).email,
-          name: (result.user as any).name,
+          email: userProfile.email,
+          name: userProfile.name,
           isPremium: false,
           createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
           updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
         };
 
         // SECURITY: Use server-generated session token instead of client-side generation
-        const resultAny = result as any;
-        if (!resultAny.sessionToken || !resultAny.sessionExpiresAt) {
+        if (!result.sessionToken || !result.sessionExpiresAt) {
           setAuthState(prev => ({ ...prev, isLoading: false }));
           return { success: false, error: 'Server-Authentifizierung fehlgeschlagen' };
         }
 
         const tokens: AuthTokens = {
-          sessionToken: resultAny.sessionToken,
-          expiresAt: resultAny.sessionExpiresAt,
+          sessionToken: result.sessionToken,
+          expiresAt: result.sessionExpiresAt,
         };
 
         await saveAuthData(user, tokens);
@@ -233,10 +253,10 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       // Extract meaningful error message
-      const errorMessage = error?.message || error?.toString() || 'Registrierung fehlgeschlagen';
+      const errorMessage = error instanceof Error ? error.message : 'Registrierung fehlgeschlagen';
       return {
         success: false,
         error: errorMessage

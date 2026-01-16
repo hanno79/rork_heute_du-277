@@ -120,6 +120,11 @@ export const translations = {
     retryButton: "Try Again",
     statusSaveFailed: "Status could not be saved. Please contact support.",
     paymentSuccessful: "Payment Successful",
+    sessionExpired: "Session expired. Please log in again.",
+    subscriptionReactivated: "Your subscription has been reactivated!",
+    reactivationFailed: "Reactivation failed",
+    subscriptionCanceled: "Your subscription has been canceled. You will keep premium access until {date}.",
+    cancellationFailed: "Cancellation failed",
 
     // Premium Banner
     unlockPremiumFeatures: "Unlock Premium Features",
@@ -310,6 +315,11 @@ export const translations = {
     retryButton: "Erneut versuchen",
     statusSaveFailed: "Status konnte nicht gespeichert werden. Bitte kontaktiere den Support.",
     paymentSuccessful: "Zahlung erfolgreich",
+    sessionExpired: "Sitzung abgelaufen. Bitte melde dich erneut an.",
+    subscriptionReactivated: "Dein Abo wurde reaktiviert!",
+    reactivationFailed: "Reaktivierung fehlgeschlagen",
+    subscriptionCanceled: "Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum {date}.",
+    cancellationFailed: "Kündigung fehlgeschlagen",
 
     // Premium Banner
     unlockPremiumFeatures: "Premium-Funktionen freischalten",

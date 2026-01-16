@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -45,6 +45,13 @@ export default function PremiumScreen() {
   const { user, isAuthenticated, tokens } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+
+  // SECURITY: Use ref to always access the latest tokens in callbacks
+  // This prevents stale closure issues where callbacks capture outdated token values
+  const tokensRef = useRef(tokens);
+  useEffect(() => {
+    tokensRef.current = tokens;
+  }, [tokens]);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
 
   // Convex mutations
@@ -301,7 +308,7 @@ export default function PremiumScreen() {
     if (!tokens?.sessionToken) {
       showAlert(
         t('error'),
-        'Sitzung abgelaufen. Bitte melde dich erneut an.',
+        t('sessionExpired'),
         [
           { text: t('cancel'), style: 'cancel', onPress: () => {} },
           { text: t('login'), onPress: () => router.push('/auth/login') },
@@ -320,12 +327,18 @@ export default function PremiumScreen() {
         setCancelDialogConfig(null);
 
         if (result.success) {
+          // SECURITY: Read current token from ref to avoid stale closure
+          const currentToken = tokensRef.current?.sessionToken;
+
           // Re-validate token before API call (could have expired during dialog)
-          if (!tokens?.sessionToken) {
+          if (!currentToken) {
             showAlert(
               t('error'),
-              'Sitzung abgelaufen. Bitte melde dich erneut an.',
-              [{ text: t('login'), onPress: () => router.push('/auth/login') }],
+              t('sessionExpired'),
+              [
+                { text: t('cancel'), style: 'cancel', onPress: () => {} },
+                { text: t('login'), onPress: () => router.push('/auth/login') },
+              ],
               '🔐'
             );
             return;
@@ -334,15 +347,15 @@ export default function PremiumScreen() {
           setIsCanceling(true);
           try {
             // Update Convex with validated session token
-            await cancelSubscriptionMutation({ sessionToken: tokens.sessionToken });
+            await cancelSubscriptionMutation({ sessionToken: currentToken });
             showAlert(
               t('success'),
-              `Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`,
+              t('subscriptionCanceled').replace('{date}', formatExpiryDate(premiumExpiresAt)),
               [{ text: t('ok'), onPress: () => {} }],
               '✅'
             );
           } catch (error) {
-            showAlert(t('error'), 'Kündigung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
+            showAlert(t('error'), t('cancellationFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
           } finally {
             setIsCanceling(false);
           }
@@ -366,7 +379,7 @@ export default function PremiumScreen() {
     if (!tokens?.sessionToken) {
       showAlert(
         t('error'),
-        'Sitzung abgelaufen. Bitte melde dich erneut an.',
+        t('sessionExpired'),
         [
           { text: t('cancel'), style: 'cancel', onPress: () => {} },
           { text: t('login'), onPress: () => router.push('/auth/login') },
@@ -379,9 +392,9 @@ export default function PremiumScreen() {
     setIsCanceling(true);
     try {
       await reactivateSubscriptionMutation({ sessionToken: tokens.sessionToken });
-      showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
+      showAlert(t('success'), t('subscriptionReactivated'), [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
-      showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
+      showAlert(t('error'), t('reactivationFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
     } finally {
       setIsCanceling(false);
     }

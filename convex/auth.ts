@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 
 // Constants for rate limiting
@@ -156,7 +156,7 @@ function validateInputLengths(args: { name?: string; email?: string; password?: 
 
 // Rate limiting helper - check if action is blocked
 async function checkRateLimit(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   email: string,
   actionType: 'login' | 'register' | 'reset'
 ): Promise<{ blocked: boolean; remainingMinutes?: number }> {
@@ -178,7 +178,7 @@ async function checkRateLimit(
 
 // Rate limiting helper - record failed attempt
 async function recordFailedAttempt(
-  ctx: any,
+  ctx: MutationCtx,
   email: string,
   actionType: 'login' | 'register' | 'reset'
 ): Promise<void> {
@@ -210,7 +210,7 @@ async function recordFailedAttempt(
 
 // Rate limiting helper - clear attempts after success
 async function clearRateLimitAttempts(
-  ctx: any,
+  ctx: MutationCtx,
   email: string,
   actionType: 'login' | 'register' | 'reset'
 ): Promise<void> {
@@ -238,6 +238,31 @@ function generateSessionToken(): string {
 
 // Session token expiration time: 24 hours
 const SESSION_TOKEN_EXPIRY = 24 * 60 * 60 * 1000;
+
+// SECURITY: Timing-safe string comparison to prevent timing attacks
+// Returns false if lengths differ, otherwise XORs char codes and returns result
+function timingSafeEqual(a: string, b: string): boolean {
+  // Normalize null/undefined to empty string
+  const strA = a ?? '';
+  const strB = b ?? '';
+
+  // If lengths differ, still do the comparison to maintain constant time
+  // but remember that the result should be false
+  const lenA = strA.length;
+  const lenB = strB.length;
+  const maxLen = Math.max(lenA, lenB);
+
+  let result = lenA ^ lenB; // Will be non-zero if lengths differ
+
+  for (let i = 0; i < maxLen; i++) {
+    // Use 0 as fallback for out-of-bounds access to maintain constant time
+    const charA = i < lenA ? strA.charCodeAt(i) : 0;
+    const charB = i < lenB ? strB.charCodeAt(i) : 0;
+    result |= charA ^ charB;
+  }
+
+  return result === 0;
+}
 
 // Register new user
 // SECURITY: Rate-limited and input-validated
@@ -821,8 +846,8 @@ export const validateSession = query({
       return { valid: false, reason: "user_not_found" };
     }
 
-    // Check if session token matches
-    if (user.sessionToken !== args.sessionToken) {
+    // SECURITY: Timing-safe token comparison to prevent timing attacks
+    if (!timingSafeEqual(user.sessionToken ?? '', args.sessionToken)) {
       return { valid: false, reason: "invalid_token" };
     }
 
@@ -858,11 +883,10 @@ export const validateSessionByToken = query({
       return { valid: false as const, reason: "token_expired" };
     }
 
-    // Return user data for authorization
+    // Return minimum required user data for authorization (no PII like email)
     return {
       valid: true as const,
       userId: user.userId,
-      email: user.email,
       isPremium: user.isPremium,
       stripeCustomerId: user.stripeCustomerId,
       stripeSubscriptionId: user.stripeSubscriptionId,
@@ -886,8 +910,8 @@ export const logout = mutation({
       return { success: false, error: "User not found" };
     }
 
-    // Verify the session token before invalidating
-    if (user.sessionToken !== args.sessionToken) {
+    // SECURITY: Timing-safe token comparison to prevent timing attacks
+    if (!timingSafeEqual(user.sessionToken ?? '', args.sessionToken)) {
       return { success: false, error: "Invalid session" };
     }
 

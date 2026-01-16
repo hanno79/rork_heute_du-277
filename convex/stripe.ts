@@ -3,6 +3,18 @@ import { v } from "convex/values";
 import { api } from "./_generated/api";
 import Stripe from "stripe";
 
+// Type-safe interface for Stripe subscription response fields we need
+// This avoids unsafe "as any" casts while handling SDK type mismatches
+interface StripeSubscriptionFields {
+  id: string;
+  status: string;
+  current_period_end?: number;
+  cancel_at_period_end?: boolean;
+  metadata?: {
+    convex_user_id?: string;
+  };
+}
+
 // Initialize Stripe
 const getStripe = () => {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -111,19 +123,20 @@ export const cancelSubscription = action({
       }
     );
 
-    // Access subscription data with type assertion to bypass strict typing
-    // The Stripe SDK types may not match the actual API response structure
-    const subscriptionData = subscriptionResponse as any;
+    // Type-safe access to subscription data
+    const subscriptionData = subscriptionResponse as unknown as StripeSubscriptionFields;
     const periodEnd: number = subscriptionData.current_period_end ?? 0;
 
     // Update user profile using server-derived userId
+    // IMPORTANT: Keep isPremium=true until period end, but mark as canceled
     await ctx.runMutation(api.stripe.updatePremiumStatus, {
       userId,
-      isPremium: false,
+      isPremium: true, // User keeps premium until period end
       premiumExpiresAt: periodEnd * 1000,
+      cancelAtPeriodEnd: true, // Marks subscription as canceled (won't renew)
     });
 
-    return { success: true };
+    return { success: true, premiumExpiresAt: periodEnd * 1000 };
   },
 });
 
@@ -156,23 +169,25 @@ export const handleStripeWebhook = action({
     switch (event.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated": {
-        // Use any to bypass strict Stripe SDK typing issues
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as unknown as StripeSubscriptionFields;
         const convexUserId = subscription.metadata?.convex_user_id;
 
         if (convexUserId) {
+          // Keep premium active if subscription is active, regardless of cancel_at_period_end
+          const isActive = subscription.status === "active";
           await ctx.runMutation(api.stripe.updatePremiumStatus, {
             userId: convexUserId,
-            isPremium: subscription.status === "active",
+            isPremium: isActive,
             premiumExpiresAt: (subscription.current_period_end ?? 0) * 1000,
             stripeSubscriptionId: subscription.id,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           });
         }
         break;
       }
 
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as any;
+        const subscription = event.data.object as unknown as StripeSubscriptionFields;
         const convexUserId = subscription.metadata?.convex_user_id;
 
         if (convexUserId) {
@@ -186,20 +201,22 @@ export const handleStripeWebhook = action({
       }
 
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object as any;
+        const invoice = event.data.object as { subscription?: string | { id: string } };
         const subscriptionId = invoice.subscription;
         if (subscriptionId) {
           const subscriptionResponse = await stripe.subscriptions.retrieve(
             typeof subscriptionId === 'string' ? subscriptionId : subscriptionId.id
           );
-          const subscription = subscriptionResponse as any;
+          const subscription = subscriptionResponse as unknown as StripeSubscriptionFields;
           const convexUserId = subscription.metadata?.convex_user_id;
 
           if (convexUserId) {
+            // Payment succeeded - premium is active, check if still set to cancel
             await ctx.runMutation(api.stripe.updatePremiumStatus, {
               userId: convexUserId,
               isPremium: true,
               premiumExpiresAt: (subscription.current_period_end ?? 0) * 1000,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
             });
           }
         }
@@ -207,13 +224,13 @@ export const handleStripeWebhook = action({
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object as any;
+        const invoice = event.data.object as { subscription?: string | { id: string } };
         const subscriptionId = invoice.subscription;
         if (subscriptionId) {
           const subscriptionResponse = await stripe.subscriptions.retrieve(
             typeof subscriptionId === 'string' ? subscriptionId : subscriptionId.id
           );
-          const subscription = subscriptionResponse as any;
+          const subscription = subscriptionResponse as unknown as StripeSubscriptionFields;
           const convexUserId = subscription.metadata?.convex_user_id;
 
           if (convexUserId) {
@@ -258,6 +275,8 @@ export const updatePremiumStatus = mutation({
     isPremium: v.boolean(),
     premiumExpiresAt: v.optional(v.union(v.number(), v.null())),
     stripeSubscriptionId: v.optional(v.string()),
+    // Flag to indicate subscription will not renew (canceled but still active until period end)
+    cancelAtPeriodEnd: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const profile = await ctx.db
@@ -276,6 +295,16 @@ export const updatePremiumStatus = mutation({
 
       if (args.stripeSubscriptionId) {
         updates.stripeSubscriptionId = args.stripeSubscriptionId;
+      }
+
+      // Set subscription status based on cancelAtPeriodEnd flag
+      if (args.cancelAtPeriodEnd === true) {
+        updates.stripeSubscriptionStatus = "canceled";
+        updates.subscriptionCanceledAt = Date.now();
+      } else if (args.cancelAtPeriodEnd === false) {
+        // Reactivation or new subscription - clear canceled status
+        updates.stripeSubscriptionStatus = "active";
+        updates.subscriptionCanceledAt = undefined;
       }
 
       await ctx.db.patch(profile._id, updates);

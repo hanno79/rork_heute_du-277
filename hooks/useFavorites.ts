@@ -11,6 +11,32 @@ import useLanguage from '@/hooks/useLanguage';
 const FAVORITES_KEY = 'favorites';
 const USE_CONVEX = true;
 
+// Helper to check if an error is an authorization error (401/403)
+const isAuthorizationError = (error: unknown): boolean => {
+  if (!error) return false;
+
+  const errorObj = error as any;
+
+  // Check for HTTP status codes
+  if (errorObj.status === 401 || errorObj.status === 403) return true;
+  if (errorObj.code === 401 || errorObj.code === 403) return true;
+
+  // Check error message for auth-related keywords
+  const message = errorObj.message || errorObj.toString() || '';
+  const authKeywords = [
+    'unauthorized',
+    'invalid session',
+    'expired session',
+    'authentication',
+    'forbidden',
+    'not authenticated',
+    'session token',
+  ];
+
+  const lowerMessage = message.toLowerCase();
+  return authKeywords.some((keyword) => lowerMessage.includes(keyword));
+};
+
 // Helper to check if a quote has a valid Convex ID
 const hasConvexId = (quote: any): boolean => {
   // Convex IDs are typically longer and don't follow UUID format
@@ -76,13 +102,15 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   const { currentLanguage } = useLanguage();
 
   // SECURITY: Get session token for API authorization
-  const sessionToken = tokens?.sessionToken || '';
+  // Use undefined instead of empty string to cleanly skip when no token is present
+  const sessionToken = tokens?.sessionToken ?? undefined;
 
   // Convex queries and mutations
   // SECURITY: Session token is required for all favorites operations
+  // Explicitly check for sessionToken != null to avoid sending empty token to server
   const convexFavorites = useQuery(
     api.quotes.getFavorites,
-    USE_CONVEX && user?.id && sessionToken ? { userId: user.id, sessionToken } : "skip"
+    USE_CONVEX && user?.id && sessionToken != null ? { userId: user.id, sessionToken } : "skip"
   );
   const addFavoriteMutation = useMutation(api.quotes.addFavorite);
   const removeFavoriteMutation = useMutation(api.quotes.removeFavorite);
@@ -148,9 +176,10 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     }
   };
 
-  const addToFavorites = async (quote: Quote) => {
-    if (!user || !isAuthenticated || !sessionToken) {
-      return;
+  const addToFavorites = async (quote: Quote): Promise<{ success: boolean; authError?: boolean }> => {
+    // SECURITY: Explicitly check for null/undefined token
+    if (!user || !isAuthenticated || sessionToken == null) {
+      return { success: false, authError: true };
     }
 
     const quoteWithId = quote as any;
@@ -165,21 +194,34 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           quoteId: convexId,
           sessionToken,
         });
+        return { success: true };
       } catch (error) {
-        // Fallback to local storage
+        // SECURITY: Distinguish auth errors from transient errors
+        const isAuthError = isAuthorizationError(error);
+
+        if (isAuthError) {
+          // Auth errors should be surfaced to the UI, not silently handled
+          console.error('[useFavorites] Authorization error in addToFavorites');
+          return { success: false, authError: true };
+        }
+
+        // Only fall back to local storage for transient/network errors
         const newFavorites = [...favorites, quote];
         await saveFavoritesToStorage(newFavorites);
+        return { success: true };
       }
     } else {
       // Mock quote without Convex ID - use local storage
       const newFavorites = [...favorites, quote];
       await saveFavoritesToStorage(newFavorites);
+      return { success: true };
     }
   };
 
-  const removeFromFavorites = async (quote: Quote) => {
-    if (!user || !isAuthenticated || !sessionToken) {
-      return;
+  const removeFromFavorites = async (quote: Quote): Promise<{ success: boolean; authError?: boolean }> => {
+    // SECURITY: Explicitly check for null/undefined token
+    if (!user || !isAuthenticated || sessionToken == null) {
+      return { success: false, authError: true };
     }
 
     const quoteWithId = quote as any;
@@ -194,15 +236,27 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           quoteId: convexId,
           sessionToken,
         });
+        return { success: true };
       } catch (error) {
-        // Fallback to local storage
+        // SECURITY: Distinguish auth errors from transient errors
+        const isAuthError = isAuthorizationError(error);
+
+        if (isAuthError) {
+          // Auth errors should be surfaced to the UI, not silently handled
+          console.error('[useFavorites] Authorization error in removeFromFavorites');
+          return { success: false, authError: true };
+        }
+
+        // Only fall back to local storage for transient/network errors
         const newFavorites = favorites.filter(fav => fav.id !== quote.id);
         await saveFavoritesToStorage(newFavorites);
+        return { success: true };
       }
     } else {
       // Mock quote without Convex ID - use local storage
       const newFavorites = favorites.filter(fav => fav.id !== quote.id);
       await saveFavoritesToStorage(newFavorites);
+      return { success: true };
     }
   };
 
@@ -220,11 +274,19 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     const quoteWithId = quote as any;
 
     if (isFavorite(quote.id) || (quoteWithId._id && isFavorite(quoteWithId._id))) {
-      await removeFromFavorites(quote);
-      return { success: true, wasAdded: false };
+      const result = await removeFromFavorites(quote);
+      // Surface auth errors as requiresLogin to prompt re-authentication
+      if (result.authError) {
+        return { success: false, requiresLogin: true };
+      }
+      return { success: result.success, wasAdded: false };
     } else {
-      await addToFavorites(quote);
-      return { success: true, wasAdded: true };
+      const result = await addToFavorites(quote);
+      // Surface auth errors as requiresLogin to prompt re-authentication
+      if (result.authError) {
+        return { success: false, requiresLogin: true };
+      }
+      return { success: result.success, wasAdded: true };
     }
   };
 
