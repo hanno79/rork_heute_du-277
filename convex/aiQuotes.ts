@@ -503,12 +503,8 @@ relevanceScore: 0-100 based on match quality`;
         savedQuotes.push({ _id: quoteId, ...primary, translations, relevanceScore: q.relevanceScore || 80 });
       }
 
-      // Increment AI search count and record search history
+      // Record search history (search count is now incremented in performSmartSearch)
       if (args.userId) {
-        await ctx.runMutation(api.search.incrementAISearchCount, {
-          userId: args.userId,
-        });
-
         // Record this search in user's history
         await ctx.runMutation(api.readingHistory.recordUserSearch, {
           userId: args.userId,

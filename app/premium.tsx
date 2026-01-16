@@ -375,8 +375,11 @@ export default function PremiumScreen() {
   const handleReactivateSubscription = async () => {
     if (!user) return;
 
+    // SECURITY: Read current token from ref to avoid stale closure issues
+    const currentToken = tokensRef.current?.sessionToken;
+
     // SECURITY: Validate session token before proceeding
-    if (!tokens?.sessionToken) {
+    if (!currentToken) {
       showAlert(
         t('error'),
         t('sessionExpired'),
@@ -391,7 +394,7 @@ export default function PremiumScreen() {
 
     setIsCanceling(true);
     try {
-      await reactivateSubscriptionMutation({ sessionToken: tokens.sessionToken });
+      await reactivateSubscriptionMutation({ sessionToken: currentToken });
       showAlert(t('success'), t('subscriptionReactivated'), [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
       showAlert(t('error'), t('reactivationFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
@@ -436,15 +439,15 @@ export default function PremiumScreen() {
           {actualIsPremium && (
             <View style={styles.subscriptionStatusCard}>
               <Text style={styles.subscriptionStatusTitle}>
-                {subscriptionCanceled ? '⏳ Abo gekündigt' : '✅ Premium aktiv'}
+                {subscriptionCanceled ? `⏳ ${t('premiumStatusCanceled')}` : `✅ ${t('premiumStatusActive')}`}
               </Text>
               <Text style={styles.subscriptionStatusText}>
-                Plan: {subscriptionPlan === 'yearly' ? 'Jährlich' : 'Monatlich'}
+                {t('premiumPlanLabel')} {subscriptionPlan === 'yearly' ? t('premiumPlanYearly') : t('premiumPlanMonthly')}
               </Text>
               <Text style={styles.subscriptionStatusText}>
                 {subscriptionCanceled
-                  ? `Zugang bis: ${formatExpiryDate(premiumExpiresAt)}`
-                  : `Nächste Zahlung: ${formatExpiryDate(premiumExpiresAt)}`}
+                  ? t('premiumAccessUntil').replace('{date}', formatExpiryDate(premiumExpiresAt))
+                  : t('premiumNextPayment').replace('{date}', formatExpiryDate(premiumExpiresAt))}
               </Text>
 
               {/* Cancel or Reactivate Button */}
@@ -455,7 +458,7 @@ export default function PremiumScreen() {
                   disabled={isCanceling}
                 >
                   <Text style={styles.reactivateButtonText}>
-                    {isCanceling ? 'Wird reaktiviert...' : '🔄 Abo reaktivieren'}
+                    {isCanceling ? t('premiumReactivating') : `🔄 ${t('premiumReactivate')}`}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -465,7 +468,7 @@ export default function PremiumScreen() {
                   disabled={isCanceling}
                 >
                   <Text style={styles.cancelButtonText}>
-                    {isCanceling ? 'Wird gekündigt...' : '🚫 Abo kündigen'}
+                    {isCanceling ? t('premiumCanceling') : `🚫 ${t('premiumCancel')}`}
                   </Text>
                 </TouchableOpacity>
               )}

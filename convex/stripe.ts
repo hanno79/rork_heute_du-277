@@ -304,7 +304,8 @@ export const updatePremiumStatus = mutation({
       } else if (args.cancelAtPeriodEnd === false) {
         // Reactivation or new subscription - clear canceled status
         updates.stripeSubscriptionStatus = "active";
-        updates.subscriptionCanceledAt = undefined;
+        // Use null to properly clear the field in Convex (undefined may be ignored by db.patch)
+        updates.subscriptionCanceledAt = null;
       }
 
       await ctx.db.patch(profile._id, updates);

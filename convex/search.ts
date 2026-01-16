@@ -3,7 +3,8 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
-const MAX_AI_SEARCHES_PER_DAY = 10;
+const MAX_SEARCHES_PER_DAY = 10;      // Total searches allowed per day (all types)
+const MAX_AI_SEARCHES_PER_DAY = 10;   // Keep for AI-specific limits if needed
 const MIN_QUOTES_FOR_CACHED_RESULT = 3;
 
 // Internal history periods - quotes can be reused after this period
@@ -11,6 +12,7 @@ const FREE_USER_REUSE_DAYS = 30;      // Free: Quote reusable after 30 days
 const PREMIUM_USER_REUSE_DAYS = 180;  // Premium: Quote reusable after 180 days
 
 // Helper: Normalize a search query for matching
+// NOTE: No .sort() - preserves word order so different queries don't match same cache
 function normalizeQuery(query: string): string {
   return query
     .toLowerCase()
@@ -19,8 +21,29 @@ function normalizeQuery(query: string): string {
     .trim()
     .split(" ")
     .filter((word) => word.length > 2) // Remove short words
-    .sort()
     .join(" ");
+}
+
+// Helper: Shuffle quotes while maintaining relevance tier priority
+// This provides variety in search results instead of always returning the same top quotes
+function shuffleWithRelevanceBias(quotes: any[]): any[] {
+  // Group quotes by relevance tiers (high: 80+, medium: 60-79, low: <60)
+  const high = quotes.filter(q => q.relevanceScore >= 80);
+  const medium = quotes.filter(q => q.relevanceScore >= 60 && q.relevanceScore < 80);
+  const low = quotes.filter(q => q.relevanceScore < 60);
+
+  // Fisher-Yates shuffle within each tier
+  const shuffle = (arr: any[]) => {
+    const result = [...arr];
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  };
+
+  // Return shuffled quotes, maintaining tier priority (high first, then medium, then low)
+  return [...shuffle(high), ...shuffle(medium), ...shuffle(low)];
 }
 
 // Helper: Extract keywords from a query
@@ -32,7 +55,7 @@ function extractKeywords(query: string): string[] {
     .filter((word) => word.length > 2);
 }
 
-// Query: Check rate limit for user
+// Query: Check rate limit for user (both total searches and AI-specific)
 export const checkRateLimit = query({
   args: {
     userId: v.string(),
@@ -47,19 +70,58 @@ export const checkRateLimit = query({
       )
       .first();
 
+    const searchCount = limit?.searchCount ?? 0;
     const aiSearchCount = limit?.aiSearchCount ?? 0;
+    const canSearch = searchCount < MAX_SEARCHES_PER_DAY;
     const canUseAI = aiSearchCount < MAX_AI_SEARCHES_PER_DAY;
 
     return {
+      searchCount,
       aiSearchCount,
-      maxSearches: MAX_AI_SEARCHES_PER_DAY,
+      maxSearches: MAX_SEARCHES_PER_DAY,
+      canSearch,
       canUseAI,
-      remaining: MAX_AI_SEARCHES_PER_DAY - aiSearchCount,
+      remaining: MAX_SEARCHES_PER_DAY - searchCount,
     };
   },
 });
 
-// Mutation: Increment AI search count
+// Mutation: Increment search count (for ALL searches, not just AI)
+export const incrementSearchCount = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const today = new Date().toISOString().split("T")[0];
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("userSearchLimits")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", today)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        searchCount: (existing.searchCount ?? 0) + 1,
+        lastSearchAt: now,
+      });
+      return { newCount: (existing.searchCount ?? 0) + 1 };
+    } else {
+      await ctx.db.insert("userSearchLimits", {
+        userId: args.userId,
+        date: today,
+        searchCount: 1,
+        aiSearchCount: 0,
+        lastSearchAt: now,
+      });
+      return { newCount: 1 };
+    }
+  },
+});
+
+// Mutation: Increment AI search count (kept for AI-specific tracking)
 export const incrementAISearchCount = mutation({
   args: {
     userId: v.string(),
@@ -85,6 +147,7 @@ export const incrementAISearchCount = mutation({
       await ctx.db.insert("userSearchLimits", {
         userId: args.userId,
         date: today,
+        searchCount: 0,
         aiSearchCount: 1,
         lastSearchAt: now,
       });
@@ -495,9 +558,11 @@ export const smartSearch = query({
       quotes.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
       if (quotes.length >= MIN_QUOTES_FOR_CACHED_RESULT) {
+        // Shuffle quotes with relevance bias for variety in results
+        const shuffledQuotes = shuffleWithRelevanceBias(quotes);
         return {
           source: "cached" as const,
-          quotes: quotes.slice(0, 5),
+          quotes: shuffledQuotes.slice(0, 5),
           contextId: existingContext?._id ?? null,
           category: matchedCategory,
           rateLimit,
@@ -552,9 +617,11 @@ export const smartSearch = query({
 
         quotes.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
+        // Shuffle quotes with relevance bias for variety in results
+        const shuffledQuotes = shuffleWithRelevanceBias(quotes);
         return {
           source: "category" as const,
-          quotes: quotes.slice(0, 5),
+          quotes: shuffledQuotes.slice(0, 5),
           contextId: existingContext?._id ?? null,
           category: matchedCategory,
           rateLimit,
@@ -626,13 +693,16 @@ export const smartSearch = query({
     });
 
     if (matchingQuotes.length >= MIN_QUOTES_FOR_CACHED_RESULT) {
+      // Assign relevance scores and shuffle for variety
+      const quotesWithScores = matchingQuotes.map((q) => ({
+        ...q,
+        relevanceScore: 50,
+        isAiGenerated: false,
+      }));
+      const shuffledQuotes = shuffleWithRelevanceBias(quotesWithScores);
       return {
         source: "database" as const,
-        quotes: matchingQuotes.slice(0, 5).map((q) => ({
-          ...q,
-          relevanceScore: 50,
-          isAiGenerated: false,
-        })),
+        quotes: shuffledQuotes.slice(0, 5),
         contextId: existingContext?._id ?? null,
         category: matchedCategory,
         rateLimit,
@@ -720,6 +790,31 @@ export const performSmartSearch = action({
     isPremium: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    // Step 0: Increment search count for ALL searches (not just AI)
+    // This happens BEFORE the search to count attempts, not just successful searches
+    if (args.userId) {
+      // Check rate limit FIRST
+      const currentRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+        userId: args.userId,
+      });
+
+      // If limit exceeded, return early with message
+      if (!currentRateLimit.canSearch) {
+        return {
+          quotes: [],
+          source: "rate_limited" as const,
+          rateLimit: currentRateLimit,
+          wasAIGenerated: false,
+          error: "SEARCH_RATE_LIMIT_EXCEEDED",
+        };
+      }
+
+      // Increment search count
+      await ctx.runMutation(api.search.incrementSearchCount, {
+        userId: args.userId,
+      });
+    }
+
     // Step 1: Try smart search (DB-first approach)
     const searchResult = await ctx.runQuery(api.search.smartSearch, {
       query: args.query,
@@ -728,24 +823,32 @@ export const performSmartSearch = action({
       isPremium: args.isPremium,
     });
 
+    // Get updated rate limit after incrementing
+    let updatedRateLimit = searchResult.rateLimit;
+    if (args.userId) {
+      updatedRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+        userId: args.userId,
+      });
+    }
+
     // Step 2: If we have enough results from DB, return them
     if (!searchResult.needsAI || searchResult.quotes.length >= MIN_QUOTES_FOR_CACHED_RESULT) {
       return {
         quotes: searchResult.quotes,
         source: searchResult.source,
-        rateLimit: searchResult.rateLimit,
+        rateLimit: updatedRateLimit,
         wasAIGenerated: false,
         category: searchResult.category,
       };
     }
 
     // Step 3: Check if user can use AI
-    if (!args.userId || !searchResult.rateLimit?.canUseAI) {
+    if (!args.userId || !updatedRateLimit?.canUseAI) {
       // Return whatever we have from DB
       return {
         quotes: searchResult.quotes,
         source: searchResult.quotes.length > 0 ? "database" : "insufficient",
-        rateLimit: searchResult.rateLimit,
+        rateLimit: updatedRateLimit,
         wasAIGenerated: false,
         category: searchResult.category,
       };

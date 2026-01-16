@@ -129,6 +129,7 @@ export default defineSchema({
   userSearchLimits: defineTable({
     date: v.string(), // "2026-01-14" (date string)
     userId: v.string(), // User ID
+    searchCount: v.number(), // Total searches today (all types)
     aiSearchCount: v.number(), // Number of AI generations today
     lastSearchAt: v.number(), // Last search timestamp
   }).index("by_user_date", ["userId", "date"]),

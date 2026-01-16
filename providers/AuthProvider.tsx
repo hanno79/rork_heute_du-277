@@ -151,7 +151,17 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       // Login successful - process user data
       if (result.user) {
         const userProfile = result.user;
-        const userId = userProfile.userId || userProfile.id || '';
+        const userId = userProfile.userId || userProfile.id;
+
+        // SECURITY: Validate that userId exists - empty ID would break downstream API calls
+        if (!userId) {
+          setAuthState(prev => ({ ...prev, isLoading: false }));
+          return {
+            success: false,
+            error: 'Benutzerkonto ungültig: Keine Benutzer-ID vorhanden'
+          };
+        }
+
         const creationTime = userProfile._creationTime;
 
         const user: User = {
@@ -222,7 +232,17 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       // Registration successful - process user data
       if (result.user) {
         const userProfile = result.user;
-        const userId = userProfile.userId || userProfile.id || '';
+        const userId = userProfile.userId || userProfile.id;
+
+        // SECURITY: Validate that userId exists - empty ID would break downstream API calls
+        if (!userId) {
+          setAuthState(prev => ({ ...prev, isLoading: false }));
+          return {
+            success: false,
+            error: 'Registrierung fehlgeschlagen: Keine Benutzer-ID erhalten'
+          };
+        }
+
         const creationTime = userProfile._creationTime;
 
         const user: User = {

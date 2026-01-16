@@ -126,6 +126,19 @@ export const translations = {
     subscriptionCanceled: "Your subscription has been canceled. You will keep premium access until {date}.",
     cancellationFailed: "Cancellation failed",
 
+    // Premium Status Card
+    premiumStatusCanceled: "Subscription canceled",
+    premiumStatusActive: "Premium active",
+    premiumPlanLabel: "Plan:",
+    premiumPlanYearly: "Yearly",
+    premiumPlanMonthly: "Monthly",
+    premiumAccessUntil: "Access until: {date}",
+    premiumNextPayment: "Next payment: {date}",
+    premiumReactivate: "Reactivate subscription",
+    premiumReactivating: "Reactivating...",
+    premiumCancel: "Cancel subscription",
+    premiumCanceling: "Canceling...",
+
     // Premium Banner
     unlockPremiumFeatures: "Unlock Premium Features",
     premiumBannerDescription: "Search for quotes by situation, use voice input, and access our complete library.",
@@ -320,6 +333,19 @@ export const translations = {
     reactivationFailed: "Reaktivierung fehlgeschlagen",
     subscriptionCanceled: "Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum {date}.",
     cancellationFailed: "Kündigung fehlgeschlagen",
+
+    // Premium Status Card
+    premiumStatusCanceled: "Abo gekündigt",
+    premiumStatusActive: "Premium aktiv",
+    premiumPlanLabel: "Plan:",
+    premiumPlanYearly: "Jährlich",
+    premiumPlanMonthly: "Monatlich",
+    premiumAccessUntil: "Zugang bis: {date}",
+    premiumNextPayment: "Nächste Zahlung: {date}",
+    premiumReactivate: "Abo reaktivieren",
+    premiumReactivating: "Wird reaktiviert...",
+    premiumCancel: "Abo kündigen",
+    premiumCanceling: "Wird gekündigt...",
 
     // Premium Banner
     unlockPremiumFeatures: "Premium-Funktionen freischalten",

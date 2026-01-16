@@ -46,13 +46,36 @@ async function hashPassword(password: string): Promise<string> {
     .join("");
 }
 
+// SECURITY: Timing-safe byte array comparison to prevent timing attacks
+function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
+  // If lengths differ, still do the comparison to maintain constant time
+  const maxLen = Math.max(a.length, b.length);
+  let result = a.length ^ b.length; // Will be non-zero if lengths differ
+
+  for (let i = 0; i < maxLen; i++) {
+    // Use 0 as fallback for out-of-bounds access to maintain constant time
+    const byteA = i < a.length ? a[i] : 0;
+    const byteB = i < b.length ? b[i] : 0;
+    result |= byteA ^ byteB;
+  }
+
+  return result === 0;
+}
+
 // Legacy SHA-256 hash verification (for migration)
+// SECURITY: Uses timing-safe comparison to prevent timing attacks
 async function verifyLegacySHA256(password: string, storedHash: string): Promise<boolean> {
   const data = new TextEncoder().encode(password);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const computedHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-  return computedHash === storedHash;
+  const computedHashBytes = new Uint8Array(hashBuffer);
+
+  // Decode stored hex hash to bytes for timing-safe comparison
+  const storedHashBytes = new Uint8Array(
+    storedHash.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+  );
+
+  // Use timing-safe byte comparison
+  return timingSafeEqualBytes(computedHashBytes, storedHashBytes);
 }
 
 // Check if hash is in legacy SHA-256 format (64 hex chars = 32 bytes)
@@ -165,7 +188,7 @@ async function checkRateLimit(
 
   const attempt = await ctx.db
     .query("loginAttempts")
-    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .withIndex("by_email", (q) => q.eq("email", key))
     .first();
 
   if (attempt?.lockedUntil && attempt.lockedUntil > Date.now()) {
@@ -188,7 +211,7 @@ async function recordFailedAttempt(
 
   const attempt = await ctx.db
     .query("loginAttempts")
-    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .withIndex("by_email", (q) => q.eq("email", key))
     .first();
 
   if (attempt) {
@@ -219,7 +242,7 @@ async function clearRateLimitAttempts(
 
   const attempt = await ctx.db
     .query("loginAttempts")
-    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .withIndex("by_email", (q) => q.eq("email", key))
     .first();
 
   if (attempt) {
@@ -241,7 +264,8 @@ const SESSION_TOKEN_EXPIRY = 24 * 60 * 60 * 1000;
 
 // SECURITY: Timing-safe string comparison to prevent timing attacks
 // Returns false if lengths differ, otherwise XORs char codes and returns result
-function timingSafeEqual(a: string, b: string): boolean {
+// Accepts null/undefined inputs which are normalized to empty strings
+function timingSafeEqual(a: string | null | undefined, b: string | null | undefined): boolean {
   // Normalize null/undefined to empty string
   const strA = a ?? '';
   const strB = b ?? '';
@@ -592,13 +616,18 @@ export const cancelSubscription = mutation({
     sessionToken: v.string(), // SECURITY: Required for authorization - userId derived from token
   },
   handler: async (ctx, args) => {
-    // SECURITY: Find user by session token ONLY - do NOT trust client-provided userId
+    // SECURITY: Find user by session token index
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
       .first();
 
     if (!user) {
+      throw new Error("Unauthorized: Invalid session token");
+    }
+
+    // SECURITY: Timing-safe token verification after index lookup
+    if (!timingSafeEqual(user.sessionToken ?? '', args.sessionToken)) {
       throw new Error("Unauthorized: Invalid session token");
     }
 
@@ -632,13 +661,18 @@ export const reactivateSubscription = mutation({
     sessionToken: v.string(), // SECURITY: Required for authorization - userId derived from token
   },
   handler: async (ctx, args) => {
-    // SECURITY: Find user by session token ONLY - do NOT trust client-provided userId
+    // SECURITY: Find user by session token index
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
       .first();
 
     if (!user) {
+      throw new Error("Unauthorized: Invalid session token");
+    }
+
+    // SECURITY: Timing-safe token verification after index lookup
+    if (!timingSafeEqual(user.sessionToken ?? '', args.sessionToken)) {
       throw new Error("Unauthorized: Invalid session token");
     }
 
@@ -868,7 +902,8 @@ export const validateSessionByToken = query({
     sessionToken: v.string(),
   },
   handler: async (ctx, args) => {
-    // SECURITY: Look up user by session token, not by client-provided userId
+    // SECURITY: Look up user by session token index
+    // Note: Index lookup followed by timing-safe verification to prevent timing attacks
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
@@ -878,12 +913,18 @@ export const validateSessionByToken = query({
       return { valid: false as const, reason: "invalid_token" };
     }
 
+    // SECURITY: Timing-safe token verification after index lookup
+    // This prevents timing attacks that could exploit index lookup timing variations
+    if (!timingSafeEqual(user.sessionToken ?? '', args.sessionToken)) {
+      return { valid: false as const, reason: "invalid_token" };
+    }
+
     // Check if session has expired
     if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
       return { valid: false as const, reason: "token_expired" };
     }
 
-    // Return minimum required user data for authorization (no PII like email)
+    // Return minimum required data for authorization
     return {
       valid: true as const,
       userId: user.userId,
