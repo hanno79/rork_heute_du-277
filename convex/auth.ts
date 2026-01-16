@@ -135,7 +135,7 @@ export const register = mutation({
       .first();
 
     if (existingUser) {
-      throw new Error("User with this email already exists");
+      return { success: false, error: "Ein Benutzer mit dieser E-Mail existiert bereits", user: null };
     }
 
     // Hash password
@@ -187,18 +187,18 @@ export const login = mutation({
       .first();
 
     if (!user) {
-      throw new Error("Invalid credentials");
+      return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
     }
 
     // Verify password
     const passwordHash = (user as any).passwordHash;
     if (!passwordHash) {
-      throw new Error("Invalid credentials");
+      return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
     }
 
     const { valid, needsMigration } = await verifyPassword(args.password, passwordHash);
     if (!valid) {
-      throw new Error("Invalid credentials");
+      return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
     }
 
     // Migrate legacy SHA-256 hash to PBKDF2 on successful login
@@ -534,5 +534,4 @@ export const resetPasswordWithSecurityAnswer = mutation({
     return { success: true };
   },
 });
-
 

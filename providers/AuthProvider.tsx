@@ -4,14 +4,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+import * as Crypto from 'expo-crypto';
 
-// Generate cryptographically secure tokens
+// Generate cryptographically secure tokens using expo-crypto
 const generateSecureToken = (): string => {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Crypto.randomUUID() + Crypto.randomUUID();
 };
 
 interface User {
@@ -103,145 +100,133 @@ export const [AuthContext, useAuth] = createContextHook(() => {
   };
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      setAuthState(prev => ({ ...prev, isLoading: true }));
+    setAuthState(prev => ({ ...prev, isLoading: true }));
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
-        };
-      }
-
-      // Try Convex login
-      try {
-        const result = await loginMutation({ email, password });
-
-        if (!result.success) {
-          setAuthState(prev => ({ ...prev, isLoading: false }));
-          return {
-            success: false,
-            error: result.error || 'Login fehlgeschlagen'
-          };
-        }
-
-        if (result.user) {
-          // Use userId field (UUID) as the primary identifier, NOT _id (Convex document ID)
-          const userId = (result.user as any).userId || result.user.id;
-          const creationTime = (result.user as any)._creationTime;
-
-          const user: User = {
-            id: userId,
-            email: result.user.email,
-            name: result.user.name,
-            isPremium: result.user.isPremium || false,
-            createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
-            updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
-          };
-
-          // Generate cryptographically secure tokens
-          const tokens: AuthTokens = {
-            accessToken: generateSecureToken(),
-            refreshToken: generateSecureToken(),
-            expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours (more secure)
-          };
-
-          await saveAuthData(user, tokens);
-          return { success: true };
-        }
-
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Ungültige E-Mail oder Passwort',
-        };
-      } catch (convexError) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Login fehlgeschlagen',
-        };
-      }
-    } catch (error) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Login fehlgeschlagen'
+        error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
+      };
+    }
+
+    try {
+      // Call Convex login
+      const result = await loginMutation({ email, password });
+
+      // Check if Convex returned an error
+      if (!result.success) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: result.error || 'Ungültige E-Mail oder Passwort'
+        };
+      }
+
+      // Login successful - process user data
+      if (result.user) {
+        const userId = (result.user as any).userId || (result.user as any).id;
+        const creationTime = (result.user as any)._creationTime;
+
+        const user: User = {
+          id: userId,
+          email: (result.user as any).email,
+          name: (result.user as any).name,
+          isPremium: (result.user as any).isPremium || false,
+          createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
+          updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
+        };
+
+        // Generate cryptographically secure tokens
+        const tokens: AuthTokens = {
+          accessToken: generateSecureToken(),
+          refreshToken: generateSecureToken(),
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+        };
+
+        await saveAuthData(user, tokens);
+        return { success: true };
+      }
+
+      // No user returned but success was true - should not happen
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: true };
+
+    } catch (error: any) {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      // Extract meaningful error message
+      const errorMessage = error?.message || error?.toString() || 'Login fehlgeschlagen';
+      return {
+        success: false,
+        error: errorMessage
       };
     }
   };
 
   const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; userId?: string }> => {
-    try {
-      setAuthState(prev => ({ ...prev, isLoading: true }));
+    setAuthState(prev => ({ ...prev, isLoading: true }));
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
-        };
-      }
-
-      // Try Convex registration
-      try {
-        const result = await registerMutation({ email, password, name });
-
-        if (!result.success) {
-          setAuthState(prev => ({ ...prev, isLoading: false }));
-          return {
-            success: false,
-            error: result.error || 'Registrierung fehlgeschlagen'
-          };
-        }
-
-        if (result.user) {
-          // Use userId field (UUID) as the primary identifier, NOT _id (Convex document ID)
-          const userId = (result.user as any).userId || result.user.id;
-          const creationTime = (result.user as any)._creationTime;
-
-          const user: User = {
-            id: userId,
-            email: result.user.email,
-            name: result.user.name,
-            isPremium: false,
-            createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
-            updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
-          };
-
-          // Generate cryptographically secure tokens
-          const tokens: AuthTokens = {
-            accessToken: generateSecureToken(),
-            refreshToken: generateSecureToken(),
-            expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours (more secure)
-          };
-
-          await saveAuthData(user, tokens);
-          return { success: true, userId: userId };
-        }
-
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Registrierung fehlgeschlagen',
-        };
-      } catch (convexError) {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return {
-          success: false,
-          error: 'Registrierung fehlgeschlagen',
-        };
-      }
-    } catch (error) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Registrierung fehlgeschlagen'
+        error: 'Bitte geben Sie eine gültige E-Mail-Adresse ein (z.B. name@domain.com)'
+      };
+    }
+
+    try {
+      // Call Convex registration
+      const result = await registerMutation({ email, password, name });
+
+      // Check if Convex returned an error
+      if (!result.success) {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+        return {
+          success: false,
+          error: result.error || 'Registrierung fehlgeschlagen'
+        };
+      }
+
+      // Registration successful - process user data
+      if (result.user) {
+        const userId = (result.user as any).userId || (result.user as any).id;
+        const creationTime = (result.user as any)._creationTime;
+
+        const user: User = {
+          id: userId,
+          email: (result.user as any).email,
+          name: (result.user as any).name,
+          isPremium: false,
+          createdAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
+          updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
+        };
+
+        // Generate cryptographically secure tokens
+        const tokens: AuthTokens = {
+          accessToken: generateSecureToken(),
+          refreshToken: generateSecureToken(),
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+        };
+
+        await saveAuthData(user, tokens);
+        return { success: true, userId: userId };
+      }
+
+      // No user returned but success was true - should not happen
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: true };
+
+    } catch (error: any) {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      // Extract meaningful error message
+      const errorMessage = error?.message || error?.toString() || 'Registrierung fehlgeschlagen';
+      return {
+        success: false,
+        error: errorMessage
       };
     }
   };
