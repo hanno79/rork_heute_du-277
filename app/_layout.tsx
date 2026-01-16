@@ -27,12 +27,9 @@ if (Platform.OS !== 'web' && !isExpoGo) {
   try {
     const stripeModule = require('@stripe/stripe-react-native');
     StripeProvider = stripeModule.StripeProvider;
-    console.log('Stripe module loaded successfully');
   } catch (error) {
-    console.warn('Stripe not available on this platform:', error);
+    // Stripe not available on this platform
   }
-} else {
-  console.log('Skipping Stripe module load - running in Expo Go or Web');
 }
 
 export {
@@ -64,15 +61,7 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
       // Initialize Stripe only on native platforms (but not Expo Go)
       if (Platform.OS !== 'web' && !isExpoGo) {
-        initializeStripe().then((success) => {
-          if (success) {
-            console.log('Stripe initialized successfully');
-          } else {
-            console.warn('Stripe initialization failed');
-          }
-        });
-      } else {
-        console.log('Stripe initialization skipped - running in Expo Go or Web');
+        initializeStripe();
       }
     }
   }, [loaded]);

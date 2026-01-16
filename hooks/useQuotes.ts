@@ -81,7 +81,7 @@ export default function useQuotes() {
           recordHistoryMutation({
             userId: user.id,
             quoteId: dailyQuoteData.quote._id as any,
-          }).catch(console.error);
+          }).catch(() => {});
         }
 
         // Cache locally
@@ -92,7 +92,6 @@ export default function useQuotes() {
       // Case 2: No daily quote yet - need to select one (first user of the day)
       if (dailyQuoteData.needsSelection && !dailyQuoteInitialized) {
         setDailyQuoteInitialized(true); // Prevent multiple calls
-        console.log('No daily quote for today, selecting one...');
 
         try {
           const result = await ensureDailyQuoteMutation({
@@ -108,15 +107,13 @@ export default function useQuotes() {
               recordHistoryMutation({
                 userId: user.id,
                 quoteId: result.quote._id as any,
-              }).catch(console.error);
+              }).catch(() => {});
             }
 
             // Cache locally
             cacheQuote(localizedQuote);
-            console.log('Daily quote selected and stored:', result.alreadyExisted ? 'already existed' : 'newly selected');
           }
         } catch (error) {
-          console.error('Error ensuring daily quote:', error);
           // Fallback to local
           const localQuote = fallbackToLocalQuote();
           if (localQuote) {
@@ -148,7 +145,7 @@ export default function useQuotes() {
         setDynamicQuotes(parsed);
       }
     } catch (error) {
-      console.error('Error loading dynamic quotes:', error);
+      // Failed to load dynamic quotes from storage
     }
   };
 
@@ -156,7 +153,7 @@ export default function useQuotes() {
     try {
       await AsyncStorage.setItem('dynamicQuotes', JSON.stringify(newQuotes));
     } catch (error) {
-      console.error('Error saving dynamic quotes:', error);
+      // Failed to save dynamic quotes to storage
     }
   };
 
@@ -166,7 +163,7 @@ export default function useQuotes() {
       await AsyncStorage.setItem('quoteOfTheDayDate', today);
       await AsyncStorage.setItem('quoteOfTheDayQuote', JSON.stringify(quote));
     } catch (error) {
-      console.error('Error caching quote:', error);
+      // Failed to cache quote
     }
   };
 
@@ -252,7 +249,6 @@ export default function useQuotes() {
       }
 
       // Fallback to local quotes
-      console.log('Using local fallback for quote of the day');
       const localQuote = fallbackToLocalQuote();
 
       if (localQuote) {
@@ -260,7 +256,6 @@ export default function useQuotes() {
         await cacheQuote(localQuote);
       }
     } catch (error) {
-      console.error('Error getting quote of the day:', error);
       // Last resort fallback
       const localQuote = fallbackToLocalQuote();
       if (localQuote) {
@@ -323,12 +318,10 @@ export default function useQuotes() {
             setRateLimit(result.rateLimit);
           }
 
-          console.log(`Search completed: ${result.quotes.length} quotes from ${result.source}, AI generated: ${result.wasAIGenerated}`);
           return;
         }
 
         // No results from smart search, fall back to local
-        console.log('Smart search returned no results, falling back to local');
         const localResults = searchLocalQuotes(query);
         const uniqueResults = removeDuplicateQuotes(localResults);
 
@@ -338,8 +331,6 @@ export default function useQuotes() {
         setHasMoreResults(uniqueResults.length > initialResults.length);
         setSearchSource('local');
       } catch (error: any) {
-        console.error('Smart search error:', error);
-
         // Check for rate limit error
         if (error.message?.includes('AI_RATE_LIMIT_EXCEEDED')) {
           setRateLimit({
@@ -361,7 +352,6 @@ export default function useQuotes() {
         setSearchSource('local');
       }
     } catch (error) {
-      console.error('Search error:', error);
       // Last resort fallback to local
       const localResults = searchLocalQuotes(query);
       const uniqueResults = removeDuplicateQuotes(localResults);

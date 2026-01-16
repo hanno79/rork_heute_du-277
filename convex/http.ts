@@ -27,8 +27,9 @@ http.route({
         headers: { "Content-Type": "application/json" },
       });
     } catch (error: any) {
-      console.error("Webhook error:", error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      // Log error server-side only, don't expose details to client
+      console.error("Webhook processing error");
+      return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });

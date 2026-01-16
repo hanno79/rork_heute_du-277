@@ -10,7 +10,7 @@ const getStripe = () => {
     throw new Error("STRIPE_SECRET_KEY not configured");
   }
   return new Stripe(stripeKey, {
-    apiVersion: "2024-12-18.acacia",
+    apiVersion: "2025-12-15.clover",
   });
 };
 
@@ -118,7 +118,8 @@ export const handleStripeWebhook = action({
         webhookSecret
       );
     } catch (err: any) {
-      throw new Error(`Invalid webhook signature: ${err.message}`);
+      // Don't expose signature validation details
+      throw new Error("Webhook validation failed");
     }
 
     switch (event.type) {

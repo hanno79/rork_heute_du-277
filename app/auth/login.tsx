@@ -39,7 +39,6 @@ export default function LoginScreen() {
         showAlert('Anmeldung fehlgeschlagen', result.error || 'Unbekannter Fehler', [{ text: 'OK', onPress: () => {} }], '❌');
       }
     } catch (err) {
-      console.error('Login error:', err);
       showAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.', [{ text: 'OK', onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);

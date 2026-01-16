@@ -11,7 +11,7 @@ if (Platform.OS !== 'web' && !isExpoGo) {
     const stripeModule = require('@stripe/stripe-react-native');
     initStripe = stripeModule.initStripe;
   } catch (error) {
-    console.warn('Stripe not available on this platform:', error);
+    // Stripe not available on this platform
   }
 }
 
@@ -27,17 +27,10 @@ export const STRIPE_PRICE_IDS = {
 // Initialize Stripe
 export const initializeStripe = async () => {
   if (Platform.OS === 'web' || isExpoGo) {
-    console.log('Stripe initialization skipped - running in Expo Go or Web');
     return true; // Return true to indicate "success" on web/Expo Go
   }
 
-  if (!STRIPE_PUBLISHABLE_KEY) {
-    console.warn('Stripe publishable key not found. Stripe functionality will be disabled.');
-    return false;
-  }
-
-  if (!initStripe) {
-    console.warn('Stripe module not available. Stripe functionality will be disabled.');
+  if (!STRIPE_PUBLISHABLE_KEY || !initStripe) {
     return false;
   }
 
@@ -47,10 +40,8 @@ export const initializeStripe = async () => {
       merchantIdentifier: 'merchant.com.rork.heutedu', // For Apple Pay
       urlScheme: 'heutedu', // For redirects
     });
-    console.log('Stripe initialized successfully');
     return true;
   } catch (error) {
-    console.error('Failed to initialize Stripe:', error);
     return false;
   }
 };

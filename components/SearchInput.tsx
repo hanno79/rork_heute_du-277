@@ -42,34 +42,29 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
 
   const startRecording = async () => {
     try {
-      console.log('Starting voice recording...');
       setIsRecording(true);
 
       if (Platform.OS === 'web') {
         // Web implementation using MediaRecorder
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
             sampleRate: 44100
-          } 
+          }
         });
-        console.log('Got media stream:', stream.getAudioTracks().length, 'audio tracks');
         const mediaRecorder = new MediaRecorder(stream);
         const audioChunks: Blob[] = [];
 
         mediaRecorder.ondataavailable = (event) => {
-          console.log('Audio data available:', event.data.size, 'bytes');
           if (event.data.size > 0) {
             audioChunks.push(event.data);
           }
         };
 
         mediaRecorder.onstop = async () => {
-          console.log('MediaRecorder stopped, processing audio chunks:', audioChunks.length);
           const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-          console.log('Created audio blob:', { size: audioBlob.size, type: audioBlob.type });
           await transcribeAudio(audioBlob);
           stream.getTracks().forEach(track => track.stop());
         };
@@ -89,7 +84,6 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         audioRecorder.record();
       }
     } catch (error) {
-      console.error('Error starting recording:', error);
       showAlert('Fehler', 'Aufnahme konnte nicht gestartet werden. Bitte versuchen Sie es erneut.', [{ text: 'OK', onPress: () => {} }], '❌');
       setIsRecording(false);
     }
@@ -97,7 +91,6 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
 
   const stopRecording = async () => {
     try {
-      console.log('Stopping voice recording...');
       setIsRecording(false);
       setIsTranscribing(true);
 
@@ -108,9 +101,8 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         }
       } else {
         await audioRecorder.stop();
-        
+
         if (audioRecorder.uri) {
-          console.log('Recording URI:', audioRecorder.uri);
           const uriParts = audioRecorder.uri.split('.');
           const fileType = uriParts[uriParts.length - 1];
           const audioFile = {
@@ -118,15 +110,12 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
             name: "recording." + fileType,
             type: "audio/" + fileType
           };
-          console.log('Created audio file object:', audioFile);
           await transcribeAudio(audioFile);
         } else {
-          console.error('No recording URI available');
           showAlert('Fehler', 'Aufnahme konnte nicht gespeichert werden.', [{ text: 'OK', onPress: () => {} }], '❌');
         }
       }
     } catch (error) {
-      console.error('Error stopping recording:', error);
       showAlert('Fehler', 'Aufnahme konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.', [{ text: 'OK', onPress: () => {} }], '❌');
       setIsTranscribing(false);
     }
@@ -134,15 +123,13 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
 
   const transcribeAudio = async (audioData: any) => {
     try {
-      console.log('Transcribing audio...', { audioData: typeof audioData, platform: Platform.OS });
-      
       // Validate audio data
       if (!audioData) {
         throw new Error('No audio data provided');
       }
 
       const formData = new FormData();
-      
+
       // Handle different platforms differently
       if (Platform.OS === 'web') {
         // For web, audioData should be a Blob
@@ -157,32 +144,28 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         }
         formData.append('audio', audioData as any);
       }
-      
+
       // Add language preference
       formData.append('language', currentLanguage === 'de' ? 'de' : 'en');
 
-      console.log('Sending transcription request...');
       const response = await fetch('https://toolkit.rork.com/stt/transcribe/', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Transcription API error:', response.status, errorText);
         throw new Error(`Transcription failed: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('Transcription result:', result);
-      
+
       // Validate the result
       if (!result || typeof result.text !== 'string') {
         throw new Error('Invalid transcription response format');
       }
-      
+
       const transcribedText = result.text.trim();
-      
+
       // Check for suspicious results that might indicate wrong audio source
       const suspiciousTexts = [
         'untertitel der amara.org-community',
@@ -190,13 +173,12 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         'subtitle',
         'untertitel'
       ];
-      
-      const isSuspicious = suspiciousTexts.some(suspicious => 
+
+      const isSuspicious = suspiciousTexts.some(suspicious =>
         transcribedText.toLowerCase().includes(suspicious.toLowerCase())
       );
-      
+
       if (isSuspicious) {
-        console.warn('Suspicious transcription result detected:', transcribedText);
         showAlert(
           'Aufnahme-Problem',
           'Die Spracherkennung hat ein unerwartetes Ergebnis geliefert. Bitte versuchen Sie es erneut und sprechen Sie deutlich.',
@@ -205,9 +187,8 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         );
         return;
       }
-      
+
       if (transcribedText && transcribedText.length > 0) {
-        console.log('Setting transcribed text:', transcribedText);
         setQuery(transcribedText);
         onSearch(transcribedText);
       } else {
@@ -219,7 +200,6 @@ export default function SearchInput({ onSearch, placeholder, isPremium }: Search
         );
       }
     } catch (error) {
-      console.error('Error transcribing audio:', error);
       showAlert(
         'Fehler bei der Spracherkennung',
         'Die Spracherkennung konnte nicht verarbeitet werden. Bitte versuchen Sie es erneut.',

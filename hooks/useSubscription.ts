@@ -12,20 +12,16 @@ interface SubscriptionState {
 const useSubscription = create<SubscriptionState>()((set) => ({
   isPremium: false,
   setIsPremium: (value) => {
-    console.log('useSubscription: Setting isPremium to', value);
     set({ isPremium: value });
   },
   resetPremium: () => {
-    console.log('useSubscription: Resetting isPremium to false');
     set({ isPremium: false });
   },
   clearCache: async () => {
-    console.log('useSubscription: Clearing old AsyncStorage cache');
     try {
       await AsyncStorage.removeItem('subscription-storage');
-      console.log('Old cache cleared successfully');
     } catch (e) {
-      console.log('No old cache to clear');
+      // Cache was already cleared or doesn't exist
     }
     set({ isPremium: false });
   },

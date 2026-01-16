@@ -32,19 +32,11 @@ export class MockStripeService {
     plan: SubscriptionPlan,
     onResult: (result: PaymentResult) => void
   ): PaymentConfirmationConfig {
-    console.log('=== MOCK STRIPE SERVICE ===');
-    console.log('getPaymentConfirmationConfig called');
-    console.log('priceId:', priceId);
-    console.log('userId:', userId);
-    console.log('plan:', plan);
-
     return {
       plan,
       onConfirm: () => {
-        console.log('MOCK: User confirmed payment - processing...');
         // Small delay to simulate processing
         setTimeout(() => {
-          console.log('MOCK: Payment successful!');
           onResult({
             success: true,
             subscriptionId: `mock_sub_${Date.now()}`,
@@ -53,7 +45,6 @@ export class MockStripeService {
         }, 500);
       },
       onCancel: () => {
-        console.log('MOCK: User cancelled payment');
         onResult({
           success: false,
           error: 'Zahlung abgebrochen',
@@ -80,9 +71,7 @@ export class MockStripeService {
     return {
       expiryDate,
       onConfirm: () => {
-        console.log('MOCK: User confirmed cancellation');
         setTimeout(() => {
-          console.log('MOCK: Cancellation successful!');
           onResult({
             success: true,
             cancelAt: premiumExpiresAt,
@@ -90,7 +79,6 @@ export class MockStripeService {
         }, 500);
       },
       onCancel: () => {
-        console.log('MOCK: User kept subscription');
         onResult({
           success: false,
           error: 'Kündigung abgebrochen',

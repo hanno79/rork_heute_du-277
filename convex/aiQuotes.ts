@@ -236,7 +236,7 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
       try {
         quotesData = JSON.parse(content);
       } catch (parseError) {
-        console.error("JSON parse error, content preview:", content.substring(0, 500));
+        console.error("JSON parse error in AI response");
 
         // Versuche das JSON zu reparieren
         // Manchmal fehlen Anführungszeichen um Werte
@@ -297,9 +297,7 @@ relevantQueries: 3-5 alternative search terms in ${langName} that would also mat
               }
             }).filter(Boolean);
 
-            if (quotesData.length > 0) {
-              console.log(`Recovered ${quotesData.length} quotes from truncated response`);
-            }
+            // Quotes recovered from truncated response
           }
 
           if (!quotesData || quotesData.length === 0) {

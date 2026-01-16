@@ -111,7 +111,6 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
 
   const loadFavoritesFromStorage = async () => {
     try {
-      console.log('Loading favorites from AsyncStorage...');
       const storageKey = user ? `${FAVORITES_KEY}_${user.id}` : FAVORITES_KEY;
       const stored = await AsyncStorage.getItem(storageKey);
       if (stored) {
@@ -124,7 +123,6 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
         setFavorites([]);
       }
     } catch (error) {
-      console.error('Error loading favorites from storage:', error);
       setFavorites([]);
     } finally {
       setIsLoading(false);
@@ -137,19 +135,17 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       await AsyncStorage.setItem(storageKey, JSON.stringify(newFavorites));
       setFavorites(newFavorites);
     } catch (error) {
-      console.error('Error saving favorites:', error);
+      // Silent fail - storage error
     }
   };
 
   const addToFavorites = async (quote: Quote) => {
     if (!user || !isAuthenticated) {
-      console.log('User not authenticated, cannot add to favorites');
       return;
     }
 
     const quoteWithId = quote as any;
     const convexId = quoteWithId._id;
-    console.log('Adding quote to favorites:', quote.id, 'Convex ID:', convexId);
 
     // Check if the quote has a valid Convex ID
     if (USE_CONVEX && hasConvexId(quoteWithId)) {
@@ -158,16 +154,13 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           userId: user.id,
           quoteId: convexId,
         });
-        console.log('Successfully added to favorites in Convex');
       } catch (error) {
-        console.error('Error adding to Convex favorites:', error);
         // Fallback to local storage
         const newFavorites = [...favorites, quote];
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
       // Mock quote without Convex ID - use local storage
-      console.log('Quote has no Convex ID, using local storage');
       const newFavorites = [...favorites, quote];
       await saveFavoritesToStorage(newFavorites);
     }
@@ -175,13 +168,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
 
   const removeFromFavorites = async (quote: Quote) => {
     if (!user || !isAuthenticated) {
-      console.log('User not authenticated, cannot remove from favorites');
       return;
     }
 
     const quoteWithId = quote as any;
     const convexId = quoteWithId._id;
-    console.log('Removing quote from favorites:', quote.id, 'Convex ID:', convexId);
 
     // Check if the quote has a valid Convex ID
     if (USE_CONVEX && hasConvexId(quoteWithId)) {
@@ -190,16 +181,13 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
           userId: user.id,
           quoteId: convexId,
         });
-        console.log('Successfully removed from favorites in Convex');
       } catch (error) {
-        console.error('Error removing from Convex favorites:', error);
         // Fallback to local storage
         const newFavorites = favorites.filter(fav => fav.id !== quote.id);
         await saveFavoritesToStorage(newFavorites);
       }
     } else {
       // Mock quote without Convex ID - use local storage
-      console.log('Quote has no Convex ID, using local storage');
       const newFavorites = favorites.filter(fav => fav.id !== quote.id);
       await saveFavoritesToStorage(newFavorites);
     }
@@ -211,14 +199,12 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   };
 
   const toggleFavorite = async (quote: Quote): Promise<{ success: boolean; wasAdded?: boolean; requiresLogin?: boolean }> => {
-    const quoteWithId = quote as any;
-    console.log('Toggling favorite for quote:', quote.id, 'Convex ID:', quoteWithId._id);
-
     // Check if user is authenticated
     if (!isAuthenticated || !user) {
-      console.log('User not authenticated, cannot save favorites');
       return { success: false, requiresLogin: true };
     }
+
+    const quoteWithId = quote as any;
 
     if (isFavorite(quote.id) || (quoteWithId._id && isFavorite(quoteWithId._id))) {
       await removeFromFavorites(quote);

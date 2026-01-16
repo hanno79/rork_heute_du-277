@@ -35,3 +35,25 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 .vercel
+
+# Temp files
+tmpclaude-*
+nul
+
+# Claude Code settings
+.claude/
+
+# Binaries
+*.exe
+ngrok*
+
+# Backup files
+*.backup.ts
+*.backup.*
+*.bak
+
+# Debug
+convex/debug.ts
+
+# Supabase (removed - using Convex)
+supabase/
