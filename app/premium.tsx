@@ -297,6 +297,20 @@ export default function PremiumScreen() {
   const handleCancelSubscription = () => {
     if (!user) return;
 
+    // SECURITY: Validate session token before proceeding
+    if (!tokens?.sessionToken) {
+      showAlert(
+        t('error'),
+        'Sitzung abgelaufen. Bitte melde dich erneut an.',
+        [
+          { text: t('cancel'), style: 'cancel', onPress: () => {} },
+          { text: t('login'), onPress: () => router.push('/auth/login') },
+        ],
+        '🔐'
+      );
+      return;
+    }
+
     // Get cancellation config from mock service
     const config = mockStripeService.getCancellationConfirmationConfig(
       userProfile?.stripeSubscriptionId || '',
@@ -306,10 +320,21 @@ export default function PremiumScreen() {
         setCancelDialogConfig(null);
 
         if (result.success) {
+          // Re-validate token before API call (could have expired during dialog)
+          if (!tokens?.sessionToken) {
+            showAlert(
+              t('error'),
+              'Sitzung abgelaufen. Bitte melde dich erneut an.',
+              [{ text: t('login'), onPress: () => router.push('/auth/login') }],
+              '🔐'
+            );
+            return;
+          }
+
           setIsCanceling(true);
           try {
-            // Update Convex
-            await cancelSubscriptionMutation({ sessionToken: tokens?.sessionToken || '' });
+            // Update Convex with validated session token
+            await cancelSubscriptionMutation({ sessionToken: tokens.sessionToken });
             showAlert(
               t('success'),
               `Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`,
@@ -337,9 +362,23 @@ export default function PremiumScreen() {
   const handleReactivateSubscription = async () => {
     if (!user) return;
 
+    // SECURITY: Validate session token before proceeding
+    if (!tokens?.sessionToken) {
+      showAlert(
+        t('error'),
+        'Sitzung abgelaufen. Bitte melde dich erneut an.',
+        [
+          { text: t('cancel'), style: 'cancel', onPress: () => {} },
+          { text: t('login'), onPress: () => router.push('/auth/login') },
+        ],
+        '🔐'
+      );
+      return;
+    }
+
     setIsCanceling(true);
     try {
-      await reactivateSubscriptionMutation({ sessionToken: tokens?.sessionToken || '' });
+      await reactivateSubscriptionMutation({ sessionToken: tokens.sessionToken });
       showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
       showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
