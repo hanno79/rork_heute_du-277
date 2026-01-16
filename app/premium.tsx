@@ -309,7 +309,7 @@ export default function PremiumScreen() {
           setIsCanceling(true);
           try {
             // Update Convex
-            await cancelSubscriptionMutation({ userId: user.id, sessionToken: tokens?.sessionToken || '' });
+            await cancelSubscriptionMutation({ sessionToken: tokens?.sessionToken || '' });
             showAlert(
               t('success'),
               `Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`,
@@ -339,7 +339,7 @@ export default function PremiumScreen() {
 
     setIsCanceling(true);
     try {
-      await reactivateSubscriptionMutation({ userId: user.id, sessionToken: tokens?.sessionToken || '' });
+      await reactivateSubscriptionMutation({ sessionToken: tokens?.sessionToken || '' });
       showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
       showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');

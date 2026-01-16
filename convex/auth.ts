@@ -561,28 +561,23 @@ export const updatePremiumStatus = mutation({
 });
 
 // Cancel subscription (sets status to canceled, keeps premium until expiry)
-// SECURITY: Requires valid session token for authorization
+// SECURITY: Uses token-only validation - userId is derived from session, not trusted from client
 export const cancelSubscription = mutation({
   args: {
-    userId: v.string(),
-    sessionToken: v.string(), // SECURITY: Required for authorization
+    sessionToken: v.string(), // SECURITY: Required for authorization - userId derived from token
   },
   handler: async (ctx, args) => {
-    // Find user by userId
+    // SECURITY: Find user by session token ONLY - do NOT trust client-provided userId
     const user = await ctx.db
       .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
       .first();
 
     if (!user) {
-      throw new Error("User not found");
-    }
-
-    // SECURITY: Validate session token to prevent IDOR
-    if (user.sessionToken !== args.sessionToken) {
       throw new Error("Unauthorized: Invalid session token");
     }
 
+    // Check if session has expired
     if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
       throw new Error("Unauthorized: Session expired");
     }
@@ -606,28 +601,23 @@ export const cancelSubscription = mutation({
 });
 
 // Reactivate subscription (for users who canceled but want to continue)
-// SECURITY: Requires valid session token for authorization
+// SECURITY: Uses token-only validation - userId is derived from session, not trusted from client
 export const reactivateSubscription = mutation({
   args: {
-    userId: v.string(),
-    sessionToken: v.string(), // SECURITY: Required for authorization
+    sessionToken: v.string(), // SECURITY: Required for authorization - userId derived from token
   },
   handler: async (ctx, args) => {
-    // Find user by userId
+    // SECURITY: Find user by session token ONLY - do NOT trust client-provided userId
     const user = await ctx.db
       .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
       .first();
 
     if (!user) {
-      throw new Error("User not found");
-    }
-
-    // SECURITY: Validate session token to prevent IDOR
-    if (user.sessionToken !== args.sessionToken) {
       throw new Error("Unauthorized: Invalid session token");
     }
 
+    // Check if session has expired
     if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
       throw new Error("Unauthorized: Session expired");
     }
@@ -842,6 +832,41 @@ export const validateSession = query({
     }
 
     return { valid: true, userId: user.userId };
+  },
+});
+
+// SECURITY: Validate session by token ONLY (no client-provided userId)
+// This is the SECURE version - looks up user by sessionToken, not by userId
+// Use this for sensitive operations where userId should NOT be trusted from client
+export const validateSessionByToken = query({
+  args: {
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // SECURITY: Look up user by session token, not by client-provided userId
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_sessionToken", (q) => q.eq("sessionToken", args.sessionToken))
+      .first();
+
+    if (!user) {
+      return { valid: false as const, reason: "invalid_token" };
+    }
+
+    // Check if session has expired
+    if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
+      return { valid: false as const, reason: "token_expired" };
+    }
+
+    // Return user data for authorization
+    return {
+      valid: true as const,
+      userId: user.userId,
+      email: user.email,
+      isPremium: user.isPremium,
+      stripeCustomerId: user.stripeCustomerId,
+      stripeSubscriptionId: user.stripeSubscriptionId,
+    };
   },
 });
 

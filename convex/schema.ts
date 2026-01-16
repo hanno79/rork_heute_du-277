@@ -55,7 +55,8 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_email", ["email"])
     .index("by_stripeCustomerId", ["stripeCustomerId"])
-    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"]),
+    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"])
+    .index("by_sessionToken", ["sessionToken"]), // SECURITY: For token-only session validation
 
   // User favorites
   userFavorites: defineTable({

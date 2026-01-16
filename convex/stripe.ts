@@ -78,17 +78,15 @@ export const createSubscription = action({
 });
 
 // Cancel subscription
-// SECURITY: Requires session token AND verifies user owns the subscription
+// SECURITY: Uses token-only validation - userId is derived from session, not trusted from client
 export const cancelSubscription = action({
   args: {
-    userId: v.string(),
     subscriptionId: v.string(),
     sessionToken: v.string(), // SECURITY: Required for authorization
   },
   handler: async (ctx, args) => {
-    // SECURITY: Validate session token first
-    const session = await ctx.runQuery(api.auth.validateSession, {
-      userId: args.userId,
+    // SECURITY: Validate session by token ONLY - do NOT trust client-provided userId
+    const session = await ctx.runQuery(api.auth.validateSessionByToken, {
       sessionToken: args.sessionToken,
     });
 
@@ -96,17 +94,11 @@ export const cancelSubscription = action({
       throw new Error("Unauthorized: Invalid or expired session");
     }
 
-    // SECURITY: Verify the user owns this subscription
-    const profile = await ctx.runQuery(api.auth.getCurrentUser, {
-      userId: args.userId,
-    });
+    // SECURITY: Use server-derived userId from validated session
+    const userId = session.userId;
 
-    if (!profile) {
-      throw new Error("User not found");
-    }
-
-    // Verify the subscription belongs to this user
-    if (profile.stripeSubscriptionId !== args.subscriptionId) {
+    // SECURITY: Verify the subscription belongs to this user using session data
+    if (session.stripeSubscriptionId !== args.subscriptionId) {
       throw new Error("Unauthorized: Subscription does not belong to this user");
     }
 
@@ -124,9 +116,9 @@ export const cancelSubscription = action({
     const subscriptionData = subscriptionResponse as any;
     const periodEnd: number = subscriptionData.current_period_end ?? 0;
 
-    // Update user profile with null-safe access
+    // Update user profile using server-derived userId
     await ctx.runMutation(api.stripe.updatePremiumStatus, {
-      userId: args.userId,
+      userId,
       isPremium: false,
       premiumExpiresAt: periodEnd * 1000,
     });
