@@ -304,17 +304,9 @@ export const getFavorites = query({
   },
   handler: async (ctx, args) => {
     // SECURITY: Validate session token to prevent IDOR
-    const user = await ctx.db
-      .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .first();
-
-    if (!user || user.sessionToken !== args.sessionToken) {
-      return { favorites: [], error: "Unauthorized" };
-    }
-
-    if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
-      return { favorites: [], error: "Session expired" };
+    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
+    if (!session.valid) {
+      return { favorites: [], error: session.error || "Unauthorized" };
     }
 
     const favorites = await ctx.db
