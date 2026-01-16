@@ -19,24 +19,30 @@ export const generateQuote = action({
       ? `for the search query: "${args.searchQuery}"`
       : "that is meaningful and inspiring";
 
+    // IMPORTANT: Emphasize that ALL content must be in the target language
+    const languageInstruction = args.language === "de"
+      ? "WICHTIG: Alle Felder (text, context, explanation, situations, tags) MÜSSEN auf Deutsch sein!"
+      : "IMPORTANT: All fields (text, context, explanation, situations, tags) MUST be in English!";
+
     const prompt = `Generate a meaningful and inspiring quote, Bible verse, or saying ${promptContext}.
 
 Requirements:
 - Language: ${langName}
+- ${languageInstruction}
 - Must be authentic (real quote from known person, actual Bible verse, or traditional saying)
 - Include proper attribution/reference
-- Provide context and explanation
+- Provide context and explanation IN ${langName.toUpperCase()}
 
 Respond with ONLY a valid JSON object (no markdown):
 {
-  "text": "The quote text",
-  "reference": "Author name or Bible reference (e.g., 'Proverbs 3:5')",
+  "text": "The quote text in ${langName}",
+  "reference": "Author name or Bible reference (e.g., 'Sprüche 3:5' for German, 'Proverbs 3:5' for English)",
   "author": "Author name if it's a quote (optional, null for Bible verses)",
   "type": "bible" | "quote" | "saying" | "poem",
-  "context": "Brief historical or situational context (2-3 sentences)",
-  "explanation": "Why this is meaningful and how to apply it (2-3 sentences)",
-  "situations": ["situation1", "situation2", "situation3"],
-  "tags": ["tag1", "tag2", "tag3"]
+  "context": "Brief historical or situational context in ${langName} (2-3 sentences)",
+  "explanation": "Why this is meaningful and how to apply it in ${langName} (2-3 sentences)",
+  "situations": ["situation1 in ${langName}", "situation2 in ${langName}", "situation3 in ${langName}"],
+  "tags": ["tag1 in ${langName}", "tag2 in ${langName}", "tag3 in ${langName}"]
 }`;
 
     try {
@@ -162,19 +168,27 @@ export const generateSearchQuotes = action({
     const count = args.count || 3;
     const langName = args.language === "de" ? "German" : "English";
 
+    // IMPORTANT: Emphasize that ALL content must be in the target language
+    const languageInstruction = args.language === "de"
+      ? "KRITISCH WICHTIG: ALLE Felder (text, context, explanation, situations, tags, relevantQueries) MÜSSEN auf Deutsch sein! Keine englischen Wörter!"
+      : "CRITICAL: ALL fields (text, context, explanation, situations, tags, relevantQueries) MUST be in English!";
+
     const prompt = `Find ${count} meaningful quotes, Bible verses, or sayings for: "${args.query}"
 
 Language: ${langName}
-Requirements: authentic quotes with proper attribution, diverse types
+${languageInstruction}
 
-IMPORTANT: For EACH quote, also provide "relevantQueries" - 3-5 ALTERNATIVE search terms that this quote would also be a good match for. This helps users find the same quote through related searches.
+Requirements:
+- Authentic quotes with proper attribution, diverse types
+- ALL content must be in ${langName.toUpperCase()} - including context, explanation, situations, tags
+- For EACH quote, provide "relevantQueries" - 3-5 ALTERNATIVE search terms in ${langName.toUpperCase()}
 
 Example: If the query is "Liebeskummer" (heartbreak), a quote about healing might also be relevant for "Trennung" (breakup), "Herzschmerz" (heartache), "Loslassen" (letting go).
 
 IMPORTANT: Return ONLY valid JSON, no explanations before or after.
 
 [
-{"text":"Quote text here","reference":"Source","author":"Author or null","type":"quote","context":"Brief context","explanation":"Why relevant","situations":["situation1","situation2"],"tags":["tag1","tag2"],"relevanceScore":85,"relevantQueries":["alternative search 1","alternative search 2","alternative search 3"]}
+{"text":"Quote text in ${langName}","reference":"Source","author":"Author or null","type":"quote","context":"Context in ${langName}","explanation":"Explanation in ${langName}","situations":["situation in ${langName}","situation2"],"tags":["tag in ${langName}","tag2"],"relevanceScore":85,"relevantQueries":["search term in ${langName}","term2","term3"]}
 ]
 
 Types: "bible", "quote", "saying", "poem"
