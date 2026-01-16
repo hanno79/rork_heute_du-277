@@ -42,7 +42,7 @@ export default function PremiumScreen() {
   // NOTE: We use Convex as the ONLY source of truth for premium status
   const { setIsPremium } = useSubscription();
   const { t } = useLanguage();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, tokens } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
@@ -309,7 +309,7 @@ export default function PremiumScreen() {
           setIsCanceling(true);
           try {
             // Update Convex
-            await cancelSubscriptionMutation({ userId: user.id });
+            await cancelSubscriptionMutation({ userId: user.id, sessionToken: tokens?.sessionToken || '' });
             showAlert(
               t('success'),
               `Dein Abo wurde gekündigt. Du behältst Premium-Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`,
@@ -339,7 +339,7 @@ export default function PremiumScreen() {
 
     setIsCanceling(true);
     try {
-      await reactivateSubscriptionMutation({ userId: user.id });
+      await reactivateSubscriptionMutation({ userId: user.id, sessionToken: tokens?.sessionToken || '' });
       showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
       showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
