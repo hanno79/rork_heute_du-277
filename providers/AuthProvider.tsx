@@ -250,7 +250,8 @@ export const [AuthContext, useAuth] = createContextHook(() => {
   const logout = async () => {
     try {
       // SECURITY: Invalidate session token on server before clearing local data
-      if (authState.user && authState.tokens) {
+      // Only call server logout if we have a valid sessionToken (new format)
+      if (authState.user && authState.tokens?.sessionToken) {
         try {
           await logoutMutation({
             userId: authState.user.id,
@@ -263,12 +264,15 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           });
         }
       }
+      // Always clear local auth data regardless of server logout result
       await clearAuthData();
     } catch (error) {
       // Log error for debugging (no sensitive data)
       console.error('[AuthProvider] logout failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+      // Still clear local data even if there's an error
+      await clearAuthData();
     }
   };
 
@@ -281,10 +285,21 @@ export const [AuthContext, useAuth] = createContextHook(() => {
 
       if (userData && tokensData) {
         const user: User = JSON.parse(userData);
-        const tokens: AuthTokens = JSON.parse(tokensData);
+        const parsedTokens = JSON.parse(tokensData);
+
+        // Check if tokens are in old format (accessToken/refreshToken) vs new format (sessionToken)
+        // If old format, force re-login to get new server-generated session token
+        if (!parsedTokens.sessionToken && (parsedTokens.accessToken || parsedTokens.refreshToken)) {
+          // Old token format - clear and require re-login
+          console.log('[AuthProvider] Old token format detected, requiring re-login');
+          await clearAuthData();
+          return;
+        }
+
+        const tokens: AuthTokens = parsedTokens;
 
         // Check if token is expired
-        if (tokens.expiresAt > Date.now()) {
+        if (tokens.sessionToken && tokens.expiresAt > Date.now()) {
           setAuthState({
             user,
             tokens,
