@@ -135,7 +135,12 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
       await AsyncStorage.setItem(storageKey, JSON.stringify(newFavorites));
       setFavorites(newFavorites);
     } catch (error) {
-      // Silent fail - storage error
+      // Log storage error for debugging (no sensitive data)
+      console.error('[useFavorites] saveFavoritesToStorage failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        favoritesCount: newFavorites.length,
+        hasUser: !!user,
+      });
     }
   };
 

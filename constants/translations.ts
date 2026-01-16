@@ -95,7 +95,7 @@ export const translations = {
     year: "year",
     save: "Save",
     loginRequired: "Login Required",
-    loginRequiredMessage: "You need to be logged in to subscribe to premium features.",
+    loginRequiredForPremium: "You need to be logged in to subscribe to premium features.",
     cancel: "Cancel",
     login: "Login",
     success: "Success",
@@ -116,7 +116,11 @@ export const translations = {
     noSituationBasedSearch: "No Situation-Based Search",
     noVoiceInput: "No Voice Input",
     subscriptionRenewal: "Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.",
-    
+    paymentSuccessfulButSaveFailed: "Your payment was successful, but there was a problem saving your premium status. Please contact support or try logging in again.",
+    retryButton: "Try Again",
+    statusSaveFailed: "Status could not be saved. Please contact support.",
+    paymentSuccessful: "Payment Successful",
+
     // Premium Banner
     unlockPremiumFeatures: "Unlock Premium Features",
     premiumBannerDescription: "Search for quotes by situation, use voice input, and access our complete library.",
@@ -281,7 +285,7 @@ export const translations = {
     year: "Jahr",
     save: "Sparen",
     loginRequired: "Anmeldung erforderlich",
-    loginRequiredMessage: "Sie müssen sich anmelden, um Premium-Features zu abonnieren.",
+    loginRequiredForPremium: "Sie müssen sich anmelden, um Premium-Features zu abonnieren.",
     cancel: "Abbrechen",
     login: "Anmelden",
     success: "Erfolg",
@@ -302,7 +306,11 @@ export const translations = {
     noSituationBasedSearch: "Keine situationsbasierte Suche",
     noVoiceInput: "Keine Spracheingabe",
     subscriptionRenewal: "Das Abonnement verlängert sich automatisch, es sei denn, die automatische Verlängerung wird mindestens 24 Stunden vor Ende der aktuellen Periode deaktiviert.",
-    
+    paymentSuccessfulButSaveFailed: "Deine Zahlung war erfolgreich, aber es gab ein Problem beim Speichern deines Premium-Status. Bitte kontaktiere den Support oder versuche dich neu anzumelden.",
+    retryButton: "Erneut versuchen",
+    statusSaveFailed: "Status konnte nicht gespeichert werden. Bitte kontaktiere den Support.",
+    paymentSuccessful: "Zahlung erfolgreich",
+
     // Premium Banner
     unlockPremiumFeatures: "Premium-Funktionen freischalten",
     premiumBannerDescription: "Suchen Sie nach Zitaten nach Situation, verwenden Sie Spracheingabe und greifen Sie auf unsere vollständige Bibliothek zu.",

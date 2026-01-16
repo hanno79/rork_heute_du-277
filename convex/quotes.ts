@@ -183,12 +183,18 @@ export const searchQuotes = query({
 });
 
 // Add to favorites
+// SECURITY NOTE: In production, use Convex Auth to validate that the requesting user
+// matches the userId parameter. Currently userId is passed from the client without
+// server-side verification. Consider implementing Convex Auth for proper authorization.
 export const addFavorite = mutation({
   args: {
     userId: v.string(),
     quoteId: v.id("quotes"),
   },
   handler: async (ctx, args) => {
+    // TODO: Validate that ctx.auth.getUserIdentity() matches args.userId
+    // when Convex Auth is implemented
+
     // Check if already favorited
     const existing = await ctx.db
       .query("userFavorites")
@@ -211,12 +217,14 @@ export const addFavorite = mutation({
 });
 
 // Remove from favorites
+// SECURITY NOTE: See addFavorite for authorization considerations
 export const removeFavorite = mutation({
   args: {
     userId: v.string(),
     quoteId: v.id("quotes"),
   },
   handler: async (ctx, args) => {
+    // TODO: Validate user identity when Convex Auth is implemented
     const favorite = await ctx.db
       .query("userFavorites")
       .withIndex("by_user_and_quote", (q) =>
@@ -233,11 +241,13 @@ export const removeFavorite = mutation({
 });
 
 // Get user favorites
+// SECURITY NOTE: See addFavorite for authorization considerations
 export const getFavorites = query({
   args: {
     userId: v.string(),
   },
   handler: async (ctx, args) => {
+    // TODO: Validate user identity when Convex Auth is implemented
     const favorites = await ctx.db
       .query("userFavorites")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))

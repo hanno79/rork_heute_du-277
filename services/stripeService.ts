@@ -16,7 +16,7 @@ if (Platform.OS !== 'web' && !isExpoGo) {
     const stripeModule = require('@stripe/stripe-react-native');
     useStripe = stripeModule.useStripe;
   } catch (error) {
-    console.warn('Stripe not available on this platform:', error);
+    // Stripe not available on this platform - expected in Expo Go
   }
 }
 
@@ -42,15 +42,12 @@ export class StripeService {
   // Create a subscription payment intent
   async createSubscription(priceId: string, userId: string): Promise<CreatePaymentIntentResponse> {
     try {
-      // For now, return mock data since Convex Stripe integration needs API keys
-      console.warn('Stripe subscription creation not yet implemented with Convex');
-
+      // Return mock data since Convex Stripe integration needs API keys
       return {
         clientSecret: 'mock_client_secret',
         subscriptionId: 'mock_sub_' + Math.random().toString(36).substr(2, 9),
       };
     } catch (error) {
-      console.error('Error creating subscription:', error);
       throw error;
     }
   }
@@ -69,15 +66,12 @@ export class StripeService {
         };
       }
 
-      // For now, just return success
-      console.log('Mock subscription created');
-
+      // Return success for mock implementation
       return {
         success: true,
         subscriptionId: 'mock_sub_' + Math.random().toString(36).substr(2, 9),
       };
     } catch (error) {
-      console.error('Error processing payment:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Payment failed',
@@ -88,14 +82,11 @@ export class StripeService {
   // Cancel subscription
   async cancelSubscription(subscriptionId: string): Promise<PaymentResult> {
     try {
-      // For now, return mock success
-      console.warn('Stripe subscription cancellation not yet implemented with Convex');
-
+      // Return mock success for now
       return {
         success: true,
       };
     } catch (error) {
-      console.error('Error canceling subscription:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to cancel subscription',
@@ -107,7 +98,7 @@ export class StripeService {
 // Hook to use Stripe service (for native platforms only)
 export const useStripeService = () => {
   if (!useStripe) {
-    console.warn('Stripe is not available on this platform. Using mock service.');
+    // Stripe not available - using mock service (expected in Expo Go/web)
     return new StripeService(null);
   }
 

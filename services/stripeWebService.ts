@@ -34,28 +34,22 @@ export class StripeWebService {
 
       if (publishableKey) {
         this.stripe = await loadStripe(publishableKey);
-        console.log('Stripe.js initialized successfully');
-      } else {
-        console.warn('Stripe publishable key not found');
       }
+      // If no key, Stripe stays null and mock service will be used
     } catch (error) {
-      console.error('Failed to initialize Stripe.js:', error);
+      // Stripe.js load failed - will use mock service
     }
   }
 
   // Create a subscription payment intent
   async createSubscription(priceId: string, userId: string): Promise<CreatePaymentIntentResponse> {
     try {
-      // For now, return mock data since Convex Stripe integration needs API keys
-      // This will be implemented once Stripe keys are configured in Convex dashboard
-      console.warn('Stripe subscription creation not yet implemented with Convex');
-
+      // Return mock data - Convex Stripe integration needs API keys configured
       return {
         clientSecret: 'mock_client_secret',
         subscriptionId: 'mock_sub_' + Math.random().toString(36).substr(2, 9),
       };
     } catch (error) {
-      console.error('Error creating subscription:', error);
       throw error;
     }
   }
@@ -77,15 +71,12 @@ export class StripeWebService {
       // Create subscription intent
       const { clientSecret, subscriptionId } = await this.createSubscription(priceId, userId);
 
-      // For now, just return success
-      console.log('Mock subscription created:', subscriptionId);
-
+      // Return success for mock implementation
       return {
         success: true,
         subscriptionId,
       };
     } catch (error) {
-      console.error('Error processing payment:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Payment failed',
@@ -99,15 +90,12 @@ export class StripeWebService {
     userId: string
   ): Promise<PaymentResult> {
     try {
-      // For now, return mock success
-      console.warn('Stripe checkout session not yet implemented with Convex');
-
+      // Return mock success - real implementation pending
       return {
         success: true,
         subscriptionId: 'mock_sub_' + Math.random().toString(36).substr(2, 9),
       };
     } catch (error) {
-      console.error('Error creating checkout session:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Checkout failed',
@@ -118,14 +106,11 @@ export class StripeWebService {
   // Cancel subscription
   async cancelSubscription(subscriptionId: string): Promise<PaymentResult> {
     try {
-      // For now, return mock success
-      console.warn('Stripe subscription cancellation not yet implemented with Convex');
-
+      // Return mock success - real implementation pending
       return {
         success: true,
       };
     } catch (error) {
-      console.error('Error canceling subscription:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to cancel subscription',

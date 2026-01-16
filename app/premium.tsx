@@ -27,20 +27,20 @@ if (Platform.OS !== 'web' && !isExpoGo) {
     const stripeServiceModule = require('@/services/stripeService');
     useStripeService = stripeServiceModule.useStripeService;
   } catch (error) {
-    console.warn('Stripe service not available:', error);
+    // Stripe service not available
   }
 } else if (Platform.OS === 'web') {
   try {
     const stripeWebServiceModule = require('@/services/stripeWebService');
     useStripeWebService = stripeWebServiceModule.useStripeWebService;
   } catch (error) {
-    console.warn('Stripe web service not available:', error);
+    // Stripe web service not available
   }
 }
 
 export default function PremiumScreen() {
   // NOTE: We use Convex as the ONLY source of truth for premium status
-  const { setIsPremium, clearCache } = useSubscription();
+  const { setIsPremium } = useSubscription();
   const { t } = useLanguage();
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
@@ -82,21 +82,6 @@ export default function PremiumScreen() {
     onCancel: () => void;
   } | null>(null);
 
-  // Clear old cache and log status on mount
-  React.useEffect(() => {
-    clearCache();
-    console.log('=== PREMIUM SCREEN MOUNTED ===');
-    console.log('User ID:', user?.id);
-    console.log('UserProfile from Convex:', userProfile);
-    console.log('isPremium from Convex:', userProfile?.isPremium);
-  }, []);
-
-  // Log when userProfile updates
-  React.useEffect(() => {
-    if (userProfile !== undefined) {
-      console.log('Convex userProfile updated:', userProfile?.isPremium);
-    }
-  }, [userProfile]);
 
   // Use Convex status as THE ONLY source of truth
   const actualIsPremium = userProfile?.isPremium === true;
@@ -133,13 +118,10 @@ export default function PremiumScreen() {
       if (isStripeConfigured && useStripeService) {
         stripeService = useStripeService();
         stripeAvailable = true;
-        console.log('Stripe service initialized successfully');
       } else {
-        console.log('Using mock Stripe service for development');
         stripeAvailable = false;
       }
     } catch (error) {
-      console.warn('Stripe not available, using mock service:', error);
       stripeAvailable = false;
     }
   } else if (Platform.OS === 'web') {
@@ -148,44 +130,86 @@ export default function PremiumScreen() {
       if (isStripeConfigured && useStripeWebService) {
         stripeWebService = useStripeWebService();
         stripeAvailable = true;
-        console.log('Stripe web service initialized successfully');
       } else {
-        console.log('Using mock Stripe service for web development');
         stripeAvailable = false;
       }
     } catch (error) {
-      console.warn('Stripe web service not available, using mock service:', error);
       stripeAvailable = false;
     }
   } else {
     // In Expo Go, always use mock service
-    console.log('Using mock Stripe service in Expo Go');
     stripeAvailable = false;
   }
 
   // Process the payment result (used by both real Stripe and mock)
   const processPaymentResult = async (result: any, plan: any) => {
-    console.log('Payment result:', result);
+    // Guard clause: ensure user is authenticated before processing payment
+    if (!user) {
+      showAlert(t('error'), t('loginRequired'), [{ text: t('ok'), onPress: () => {} }], '❌');
+      setIsLoading(false);
+      return;
+    }
 
     if (result.success) {
-      console.log('Payment successful, updating Convex...');
-      // Update premium status in Convex database
+      // Update premium status in Convex database with retry logic
       const expiresAt = Date.now() + (plan?.interval === 'year' ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
 
-      try {
-        console.log('Calling updatePremiumStatus with userId:', user!.id);
-        await updatePremiumStatus({
-          userId: user!.id,
-          isPremium: true,
-          stripeCustomerId: result.customerId,
-          stripeSubscriptionId: result.subscriptionId,
-          premiumExpiresAt: expiresAt,
-          stripeSubscriptionStatus: 'active',
-          subscriptionPlan: selectedPlan,
-        });
-        console.log('Convex update successful!');
-      } catch (convexError) {
-        console.error('Convex update FAILED:', convexError);
+      const updateData = {
+        userId: user.id,
+        isPremium: true,
+        stripeCustomerId: result.customerId,
+        stripeSubscriptionId: result.subscriptionId,
+        premiumExpiresAt: expiresAt,
+        stripeSubscriptionStatus: 'active' as const,
+        subscriptionPlan: selectedPlan,
+      };
+
+      // Retry logic: attempt up to 3 times with exponential backoff
+      let updateSucceeded = false;
+      let lastError: Error | null = null;
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          await updatePremiumStatus(updateData);
+          updateSucceeded = true;
+          break;
+        } catch (convexError: any) {
+          lastError = convexError;
+          if (attempt < maxRetries) {
+            // Wait before retry: 500ms, 1000ms, 2000ms
+            await new Promise(resolve => setTimeout(resolve, 500 * Math.pow(2, attempt - 1)));
+          }
+        }
+      }
+
+      if (!updateSucceeded) {
+        // All retries failed - inform user but payment was successful
+        setIsLoading(false);
+        showAlert(
+          t('paymentSuccessful'),
+          t('paymentSuccessfulButSaveFailed'),
+          [
+            {
+              text: t('retryButton'),
+              onPress: async () => {
+                setIsLoading(true);
+                try {
+                  await updatePremiumStatus(updateData);
+                  setIsPremium(true);
+                  showAlert(t('success'), t('subscriptionActivated'), [{ text: t('ok'), onPress: () => router.back() }], '✅');
+                } catch (retryError) {
+                  showAlert(t('error'), t('statusSaveFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
+                } finally {
+                  setIsLoading(false);
+                }
+              },
+            },
+            { text: t('ok'), onPress: () => router.back() },
+          ],
+          '⚠️'
+        );
+        return;
       }
 
       // Update local state
@@ -198,7 +222,6 @@ export default function PremiumScreen() {
         '✅'
       );
     } else {
-      console.log('Payment failed or cancelled:', result.error);
       if (result.error && result.error !== 'Zahlung abgebrochen') {
         showAlert(t('error'), result.error || t('paymentFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
       }
@@ -210,7 +233,7 @@ export default function PremiumScreen() {
     if (!isAuthenticated || !user) {
       showAlert(
         t('loginRequired'),
-        t('loginRequiredMessage'),
+        t('loginRequiredForPremium'),
         [
           { text: t('cancel'), style: 'cancel', onPress: () => {} },
           { text: t('login'), onPress: () => router.push('/auth/login') },
@@ -226,12 +249,6 @@ export default function PremiumScreen() {
       return;
     }
 
-    console.log('=== PREMIUM PURCHASE DEBUG ===');
-    console.log('User ID:', user.id);
-    console.log('Plan:', plan);
-    console.log('Stripe Available:', stripeAvailable);
-    console.log('Is Expo Go:', isExpoGo);
-
     if (stripeAvailable) {
       // Use real Stripe service
       setIsLoading(true);
@@ -246,13 +263,11 @@ export default function PremiumScreen() {
           await processPaymentResult(result, plan);
         }
       } catch (error) {
-        console.error('Subscription error:', error);
         showAlert(t('error'), t('paymentFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
         setIsLoading(false);
       }
     } else {
       // Use mock Stripe service - show custom dialog
-      console.log('Using MOCK Stripe service - showing custom dialog');
       const config = mockStripeService.getPaymentConfirmationConfig(
         plan.priceId,
         user.id,
@@ -302,7 +317,6 @@ export default function PremiumScreen() {
               '✅'
             );
           } catch (error) {
-            console.error('Cancellation error:', error);
             showAlert(t('error'), 'Kündigung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
           } finally {
             setIsCanceling(false);
@@ -328,7 +342,6 @@ export default function PremiumScreen() {
       await reactivateSubscriptionMutation({ userId: user.id });
       showAlert(t('success'), 'Dein Abo wurde reaktiviert!', [{ text: t('ok'), onPress: () => {} }], '✅');
     } catch (error) {
-      console.error('Reactivation error:', error);
       showAlert(t('error'), 'Reaktivierung fehlgeschlagen', [{ text: t('ok'), onPress: () => {} }], '❌');
     } finally {
       setIsCanceling(false);
@@ -417,8 +430,6 @@ export default function PremiumScreen() {
                 <TouchableOpacity
                   style={{ backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, marginTop: 12 }}
                   onPress={async () => {
-                    console.log('=== DIRECT PREMIUM ACTIVATION ===');
-                    console.log('User ID:', user.id);
                     try {
                       await updatePremiumStatus({
                         userId: user.id,
@@ -427,11 +438,9 @@ export default function PremiumScreen() {
                         stripeSubscriptionStatus: 'active',
                         subscriptionPlan: selectedPlan,
                       });
-                      console.log('Premium activated successfully!');
                       showAlert('Erfolg', 'Premium wurde aktiviert!', [{ text: 'OK', onPress: () => {} }], '🎉');
                     } catch (error) {
-                      console.error('Failed to activate premium:', error);
-                      showAlert('Fehler', 'Premium konnte nicht aktiviert werden: ' + String(error), [{ text: 'OK', onPress: () => {} }], '❌');
+                      showAlert('Fehler', 'Premium konnte nicht aktiviert werden', [{ text: 'OK', onPress: () => {} }], '❌');
                     }
                   }}
                 >

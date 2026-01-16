@@ -35,7 +35,7 @@ interface AuthState {
 
 interface AuthActions {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
 }
@@ -81,7 +81,11 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         isAuthenticated: true,
       });
     } catch (error) {
-      // Silent fail - auth data save error
+      // Log error for debugging (no sensitive data)
+      console.error('[AuthProvider] saveAuthData failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hasUser: !!user,
+      });
     }
   };
 
@@ -95,7 +99,10 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         isAuthenticated: false,
       });
     } catch (error) {
-      // Silent fail - auth data clear error
+      // Log error for debugging (no sensitive data)
+      console.error('[AuthProvider] clearAuthData failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   };
 
@@ -235,7 +242,10 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     try {
       await clearAuthData();
     } catch (error) {
-      // Silent fail - logout error
+      // Log error for debugging (no sensitive data)
+      console.error('[AuthProvider] logout failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
   };
 

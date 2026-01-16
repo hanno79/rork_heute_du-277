@@ -85,7 +85,7 @@ export default function NotificationSettings({ visible, onClose }: NotificationS
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'OK',
-          onPress: (time) => {
+          onPress: (time: string | undefined) => {
             if (time && /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) {
               handleTimeChange(time);
             }

@@ -33,15 +33,15 @@ export default function QuoteDetailScreen() {
   // Apply localization
   const quote = quoteData;
 
-  // Get localized content
-  const localizedQuote = quote.translations[currentLanguage];
-  const displayText = localizedQuote?.text || quote.text;
-  const displayContext = localizedQuote?.context || quote.context;
-  const displayExplanation = localizedQuote?.explanation || quote.explanation;
-  const displaySituations = localizedQuote?.situations || quote.situations;
-  const displayTags = localizedQuote?.tags || quote.tags;
-  const displayReflectionQuestions = localizedQuote?.reflectionQuestions || quote.reflectionQuestions;
-  const displayPracticalTips = localizedQuote?.practicalTips || quote.practicalTips;
+  // Get localized content with proper typing
+  const localizedQuote = quote.translations?.[currentLanguage];
+  const displayText: string = localizedQuote?.text || quote.text || '';
+  const displayContext: string = localizedQuote?.context || quote.context || '';
+  const displayExplanation: string = localizedQuote?.explanation || quote.explanation || '';
+  const displaySituations: string[] = localizedQuote?.situations || quote.situations || [];
+  const displayTags: string[] = localizedQuote?.tags || quote.tags || [];
+  const displayReflectionQuestions: string[] = localizedQuote?.reflectionQuestions || quote.reflectionQuestions || [];
+  const displayPracticalTips: string[] = localizedQuote?.practicalTips || quote.practicalTips || [];
 
   const getTypeLabel = (type: string) => {
     switch (type) {
@@ -65,7 +65,7 @@ export default function QuoteDetailScreen() {
 Shared from ${t('appName')}`,
       });
     } catch (error) {
-      console.error(error);
+      // Share cancelled or failed - no action needed
     }
   };
   
@@ -109,7 +109,7 @@ Shared from ${t('appName')}`,
         );
       }
     } catch (error) {
-      console.error('Error toggling favorite:', error);
+      // Favorite toggle failed - error already handled by useFavorites
     } finally {
       setIsToggling(false);
     }

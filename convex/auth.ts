@@ -120,6 +120,26 @@ async function verifyPassword(
   return { valid: result === 0, needsMigration: false };
 }
 
+// Password validation helper
+function validatePassword(password: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (password.length < 8) {
+    errors.push("mindestens 8 Zeichen");
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push("einen Großbuchstaben");
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push("einen Kleinbuchstaben");
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push("eine Zahl");
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 // Register new user
 export const register = mutation({
   args: {
@@ -128,6 +148,16 @@ export const register = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    // Validate password on backend (same rules as frontend)
+    const passwordValidation = validatePassword(args.password);
+    if (!passwordValidation.valid) {
+      return {
+        success: false,
+        error: `Passwort benötigt: ${passwordValidation.errors.join(", ")}`,
+        user: null,
+      };
+    }
+
     // Check if user already exists
     const existingUser = await ctx.db
       .query("userProfiles")
@@ -135,7 +165,8 @@ export const register = mutation({
       .first();
 
     if (existingUser) {
-      return { success: false, error: "Ein Benutzer mit dieser E-Mail existiert bereits", user: null };
+      // Generic error message to prevent user enumeration
+      return { success: false, error: "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.", user: null };
     }
 
     // Hash password
@@ -173,32 +204,77 @@ export const register = mutation({
   },
 });
 
-// Login
+// Login with rate limiting
 export const login = mutation({
   args: {
     email: v.string(),
     password: v.string(),
   },
   handler: async (ctx, args) => {
+    const normalizedEmail = args.email.toLowerCase().trim();
+
+    // Check for rate limiting / account lockout
+    const loginAttempt = await ctx.db
+      .query("loginAttempts")
+      .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+      .first();
+
+    if (loginAttempt?.lockedUntil && loginAttempt.lockedUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((loginAttempt.lockedUntil - Date.now()) / 60000);
+      return {
+        success: false,
+        error: `Konto temporär gesperrt. Bitte versuchen Sie es in ${remainingMinutes} Minuten erneut.`,
+        user: null,
+      };
+    }
+
     // Find user by email
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_email", (q) => q.eq("email", args.email))
       .first();
 
+    // Helper function to record failed attempt
+    const recordFailedAttempt = async () => {
+      const now = Date.now();
+      if (loginAttempt) {
+        const newAttempts = loginAttempt.attempts + 1;
+        const shouldLock = newAttempts >= MAX_LOGIN_ATTEMPTS;
+        await ctx.db.patch(loginAttempt._id, {
+          attempts: newAttempts,
+          lastAttempt: now,
+          lockedUntil: shouldLock ? now + LOCKOUT_DURATION : undefined,
+        });
+      } else {
+        await ctx.db.insert("loginAttempts", {
+          email: normalizedEmail,
+          attempts: 1,
+          lastAttempt: now,
+        });
+      }
+    };
+
     if (!user) {
+      await recordFailedAttempt();
       return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
     }
 
     // Verify password
     const passwordHash = (user as any).passwordHash;
     if (!passwordHash) {
+      await recordFailedAttempt();
       return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
     }
 
     const { valid, needsMigration } = await verifyPassword(args.password, passwordHash);
     if (!valid) {
+      await recordFailedAttempt();
       return { success: false, error: "Ungültige E-Mail oder Passwort", user: null };
+    }
+
+    // Successful login - reset failed attempts
+    if (loginAttempt) {
+      await ctx.db.delete(loginAttempt._id);
     }
 
     // Migrate legacy SHA-256 hash to PBKDF2 on successful login
@@ -502,17 +578,21 @@ export const resetPasswordWithSecurityAnswer = mutation({
     newPassword: v.string(),
   },
   handler: async (ctx, args) => {
+    // Generic error message to prevent user enumeration
+    const genericError = "Passwort-Reset fehlgeschlagen. Bitte überprüfen Sie Ihre Angaben.";
+
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_email", (q) => q.eq("email", args.email))
       .first();
 
     if (!user) {
-      throw new Error("Benutzer nicht gefunden");
+      // Return same error for all failure cases to prevent enumeration
+      return { success: false, error: genericError };
     }
 
     if (!user.securityAnswerHash) {
-      throw new Error("Keine Sicherheitsfrage eingerichtet");
+      return { success: false, error: genericError };
     }
 
     // Verify the security answer (case-insensitive, trimmed)
@@ -522,7 +602,16 @@ export const resetPasswordWithSecurityAnswer = mutation({
     );
 
     if (!valid) {
-      throw new Error("Falsche Sicherheitsantwort");
+      return { success: false, error: genericError };
+    }
+
+    // Validate new password
+    const passwordValidation = validatePassword(args.newPassword);
+    if (!passwordValidation.valid) {
+      return {
+        success: false,
+        error: `Neues Passwort benötigt: ${passwordValidation.errors.join(", ")}`,
+      };
     }
 
     // Hash and save the new password

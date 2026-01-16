@@ -133,7 +133,7 @@ const cancelWebNotifications = async () => {
       await AsyncStorage.removeItem(WEB_NOTIFICATION_INTERVALS_KEY);
     }
   } catch (error) {
-    console.warn('Failed to cancel web notifications:', error);
+    // Web notification cancellation failed - non-critical
   }
 };
 
@@ -183,7 +183,6 @@ export default function useNotifications() {
     }
     
     // Native notifications not supported in Expo Go SDK 53+
-    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const loadSettings = async () => {
@@ -193,7 +192,7 @@ export default function useNotifications() {
         setSettings(JSON.parse(stored));
       }
     } catch (error) {
-      console.error('Error loading notification settings:', error);
+      // Settings load failed - use defaults
     } finally {
       setIsLoading(false);
     }
@@ -203,7 +202,7 @@ export default function useNotifications() {
     try {
       await AsyncStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify(newSettings));
       setSettings(newSettings);
-      
+
       if (newSettings.enabled) {
         if (!capabilities.canSchedule) {
           // Show user-friendly message about limitations
@@ -220,7 +219,7 @@ export default function useNotifications() {
         await cancelAllNotifications();
       }
     } catch (error) {
-      console.error('Error saving notification settings:', error);
+      // Settings save failed - non-critical
     }
   };
 
@@ -244,9 +243,8 @@ export default function useNotifications() {
       await scheduleWebNotifications(notificationSettings);
       return;
     }
-    
+
     // Native notifications not supported in Expo Go SDK 53+
-    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const cancelAllNotifications = async () => {
@@ -254,9 +252,8 @@ export default function useNotifications() {
       cancelWebNotifications();
       return;
     }
-    
+
     // Native notifications not supported in Expo Go SDK 53+
-    console.log('Native notifications not available in Expo Go SDK 53+');
   };
 
   const updateSettings = async (newSettings: Partial<NotificationSettings>) => {

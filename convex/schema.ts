@@ -155,4 +155,13 @@ export default defineSchema({
     terms_de: v.array(v.string()), // German synonyms: ["liebeskummer", "herzschmerz", "trennung"]
     terms_en: v.array(v.string()), // English synonyms: ["heartbreak", "breakup", "heartache"]
   }).index("by_groupName", ["groupName"]),
+
+  // Login attempts tracking for rate limiting
+  // Prevents brute-force attacks by locking accounts after failed attempts
+  loginAttempts: defineTable({
+    email: v.string(),
+    attempts: v.number(),
+    lastAttempt: v.number(),
+    lockedUntil: v.optional(v.number()),
+  }).index("by_email", ["email"]),
 });
