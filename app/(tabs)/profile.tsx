@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Switch, ScrollView, Platform } from 'react-native';
 import { router } from 'expo-router';
-import { Crown, Settings, BookOpen, Share2, Globe, LogOut, User } from 'lucide-react-native';
+import { Crown, Settings, BookOpen, Share2, Globe, LogOut, User, Shield } from 'lucide-react-native';
 import colors from '@/constants/colors';
 import typography from '@/constants/typography';
 import useLanguage from '@/hooks/useLanguage';
@@ -258,7 +258,19 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
           )}
-          
+
+          {isAuthenticated && (
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => router.push('/security-question')}
+            >
+              <View style={styles.settingLeft}>
+                <Shield size={20} color={colors.text} style={styles.settingIcon} />
+                <Text style={styles.settingLabel}>Sicherheitsfrage</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.settingItem}>
             <View style={styles.settingLeft}>
               <Share2 size={20} color={colors.text} style={styles.settingIcon} />

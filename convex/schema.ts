@@ -45,6 +45,9 @@ export default defineSchema({
     stripeSubscriptionStatus: v.optional(v.string()), // "active", "canceled", "past_due"
     subscriptionCanceledAt: v.optional(v.number()),   // Timestamp when user canceled
     subscriptionPlan: v.optional(v.string()),         // "monthly" or "yearly"
+    // Security question for password recovery
+    securityQuestion: v.optional(v.string()),         // The selected security question
+    securityAnswerHash: v.optional(v.string()),       // PBKDF2 hashed answer
   })
     .index("by_userId", ["userId"])
     .index("by_email", ["email"])

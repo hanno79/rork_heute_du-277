@@ -2,8 +2,17 @@ import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { useConvexAuth, useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
+
+// Generate cryptographically secure tokens
+const generateSecureToken = (): string => {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
 
 interface User {
   id: string;
@@ -75,7 +84,7 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         isAuthenticated: true,
       });
     } catch (error) {
-      console.error('Failed to save auth data:', error);
+      // Silent fail - auth data save error
     }
   };
 
@@ -89,14 +98,13 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         isAuthenticated: false,
       });
     } catch (error) {
-      console.error('Failed to clear auth data:', error);
+      // Silent fail - auth data clear error
     }
   };
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
-      console.log('Starting login for:', email);
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -125,8 +133,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           const userId = (result.user as any).userId || result.user.id;
           const creationTime = (result.user as any)._creationTime;
 
-          console.log('Login successful - userId:', userId);
-
           const user: User = {
             id: userId,
             email: result.user.email,
@@ -136,10 +142,11 @@ export const [AuthContext, useAuth] = createContextHook(() => {
             updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
           };
 
+          // Generate cryptographically secure tokens
           const tokens: AuthTokens = {
-            accessToken: 'convex_token_' + userId,
-            refreshToken: 'convex_refresh_' + userId,
-            expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+            accessToken: generateSecureToken(),
+            refreshToken: generateSecureToken(),
+            expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours (more secure)
           };
 
           await saveAuthData(user, tokens);
@@ -152,7 +159,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           error: 'Ungültige E-Mail oder Passwort',
         };
       } catch (convexError) {
-        console.error('Convex login error:', convexError);
         setAuthState(prev => ({ ...prev, isLoading: false }));
         return {
           success: false,
@@ -160,7 +166,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         };
       }
     } catch (error) {
-      console.error('Login catch error:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
@@ -169,10 +174,9 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     }
   };
 
-  const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
+  const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; userId?: string }> => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true }));
-      console.log('Starting registration for:', email);
 
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -188,8 +192,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
       try {
         const result = await registerMutation({ email, password, name });
 
-        console.log('Convex registration response:', result);
-
         if (!result.success) {
           setAuthState(prev => ({ ...prev, isLoading: false }));
           return {
@@ -203,8 +205,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           const userId = (result.user as any).userId || result.user.id;
           const creationTime = (result.user as any)._creationTime;
 
-          console.log('User created successfully - userId:', userId);
-
           const user: User = {
             id: userId,
             email: result.user.email,
@@ -214,14 +214,15 @@ export const [AuthContext, useAuth] = createContextHook(() => {
             updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
           };
 
+          // Generate cryptographically secure tokens
           const tokens: AuthTokens = {
-            accessToken: 'convex_token_' + userId,
-            refreshToken: 'convex_refresh_' + userId,
-            expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+            accessToken: generateSecureToken(),
+            refreshToken: generateSecureToken(),
+            expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours (more secure)
           };
 
           await saveAuthData(user, tokens);
-          return { success: true };
+          return { success: true, userId: userId };
         }
 
         setAuthState(prev => ({ ...prev, isLoading: false }));
@@ -230,7 +231,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           error: 'Registrierung fehlgeschlagen',
         };
       } catch (convexError) {
-        console.error('Convex registration error:', convexError);
         setAuthState(prev => ({ ...prev, isLoading: false }));
         return {
           success: false,
@@ -238,7 +238,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         };
       }
     } catch (error) {
-      console.error('Registration catch error:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return {
         success: false,
@@ -251,7 +250,7 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     try {
       await clearAuthData();
     } catch (error) {
-      console.error('Logout failed:', error);
+      // Silent fail - logout error
     }
   };
 
@@ -281,7 +280,6 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         setAuthState(prev => ({ ...prev, isLoading: false }));
       }
     } catch (error) {
-      console.error('Failed to refresh auth:', error);
       setAuthState(prev => ({ ...prev, isLoading: false }));
     }
   };

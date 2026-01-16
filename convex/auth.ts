@@ -1,22 +1,123 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-// Simple password hashing (in production, use bcrypt or similar)
+// Constants for rate limiting
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+
+// Secure password hashing with PBKDF2 (600,000 iterations as per NIST 2023 recommendation)
+const PBKDF2_ITERATIONS = 600000;
+const SALT_LENGTH = 16;
+const HASH_LENGTH = 32;
+
 async function hashPassword(password: string): Promise<string> {
-  // For now, we'll use a simple hash. In production, use a proper library
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
+  // Generate random salt
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+
+  // Import password as key material
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  // Derive hash using PBKDF2
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    HASH_LENGTH * 8 // bits
+  );
+
+  // Combine salt + hash for storage
+  const hashArray = new Uint8Array(hashBuffer);
+  const combined = new Uint8Array(SALT_LENGTH + HASH_LENGTH);
+  combined.set(salt);
+  combined.set(hashArray, SALT_LENGTH);
+
+  return Array.from(combined)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// Legacy SHA-256 hash verification (for migration)
+async function verifyLegacySHA256(password: string, storedHash: string): Promise<boolean> {
+  const data = new TextEncoder().encode(password);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  const computedHash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return computedHash === storedHash;
+}
+
+// Check if hash is in legacy SHA-256 format (64 hex chars = 32 bytes)
+function isLegacyHash(storedHash: string): boolean {
+  // PBKDF2 hash is 96 hex chars (16 bytes salt + 32 bytes hash = 48 bytes)
+  // Legacy SHA-256 is 64 hex chars (32 bytes)
+  return storedHash.length === 64;
 }
 
 async function verifyPassword(
   password: string,
-  hash: string
-): Promise<boolean> {
-  const passwordHash = await hashPassword(password);
-  return passwordHash === hash;
+  storedHash: string
+): Promise<{ valid: boolean; needsMigration: boolean }> {
+  // Check if this is a legacy SHA-256 hash
+  if (isLegacyHash(storedHash)) {
+    const valid = await verifyLegacySHA256(password, storedHash);
+    return { valid, needsMigration: valid }; // If valid, needs migration to PBKDF2
+  }
+
+  // PBKDF2 verification
+  const hashBytes = new Uint8Array(
+    storedHash.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+  );
+
+  if (hashBytes.length !== SALT_LENGTH + HASH_LENGTH) {
+    return { valid: false, needsMigration: false };
+  }
+
+  const salt = hashBytes.slice(0, SALT_LENGTH);
+  const storedHashPart = hashBytes.slice(SALT_LENGTH);
+
+  // Import password as key material
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+
+  // Derive hash using same salt
+  const hashBuffer = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    HASH_LENGTH * 8
+  );
+
+  const computedHash = new Uint8Array(hashBuffer);
+
+  // Timing-safe comparison
+  if (computedHash.length !== storedHashPart.length) {
+    return { valid: false, needsMigration: false };
+  }
+
+  let result = 0;
+  for (let i = 0; i < computedHash.length; i++) {
+    result |= computedHash[i] ^ storedHashPart[i];
+  }
+
+  return { valid: result === 0, needsMigration: false };
 }
 
 // Register new user
@@ -95,9 +196,15 @@ export const login = mutation({
       throw new Error("Invalid credentials");
     }
 
-    const valid = await verifyPassword(args.password, passwordHash);
+    const { valid, needsMigration } = await verifyPassword(args.password, passwordHash);
     if (!valid) {
       throw new Error("Invalid credentials");
+    }
+
+    // Migrate legacy SHA-256 hash to PBKDF2 on successful login
+    if (needsMigration) {
+      const newHash = await hashPassword(args.password);
+      await ctx.db.patch(user._id, { passwordHash: newHash } as any);
     }
 
     return {
@@ -200,55 +307,6 @@ export const updateUserSettings = mutation({
   },
 });
 
-// Delete user by email (for testing/cleanup)
-export const deleteUserByEmail = mutation({
-  args: {
-    email: v.string(),
-  },
-  handler: async (ctx, args) => {
-    // Find user by email
-    const user = await ctx.db
-      .query("userProfiles")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
-      .first();
-
-    if (!user) {
-      return { success: false, message: "User not found" };
-    }
-
-    // Delete user settings
-    const settings = await ctx.db
-      .query("userSettings")
-      .withIndex("by_userId", (q) => q.eq("userId", user.userId))
-      .first();
-    if (settings) {
-      await ctx.db.delete(settings._id);
-    }
-
-    // Delete user favorites
-    const favorites = await ctx.db
-      .query("userFavorites")
-      .withIndex("by_userId", (q) => q.eq("userId", user.userId))
-      .collect();
-    for (const favorite of favorites) {
-      await ctx.db.delete(favorite._id);
-    }
-
-    // Delete user quote history
-    const history = await ctx.db
-      .query("userQuoteHistory")
-      .withIndex("by_userId", (q) => q.eq("userId", user.userId))
-      .collect();
-    for (const entry of history) {
-      await ctx.db.delete(entry._id);
-    }
-
-    // Delete user profile
-    await ctx.db.delete(user._id);
-
-    return { success: true, message: "User deleted successfully" };
-  },
-});
 
 // Update user premium status
 export const updatePremiumStatus = mutation({
@@ -384,22 +442,97 @@ export const checkAndExpirePremium = mutation({
   },
 });
 
-// Get all users (for debugging)
-export const getAllUsers = query({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("userProfiles").collect();
-    return users.map((u) => ({
-      id: u.userId,
-      email: u.email,
-      name: u.name,
-      isPremium: u.isPremium,
-      stripeCustomerId: u.stripeCustomerId,
-      stripeSubscriptionId: u.stripeSubscriptionId,
-      premiumExpiresAt: u.premiumExpiresAt,
-      stripeSubscriptionStatus: u.stripeSubscriptionStatus,
-      subscriptionCanceledAt: u.subscriptionCanceledAt,
-      subscriptionPlan: u.subscriptionPlan,
-    }));
+// ============================================
+// SECURITY QUESTION / PASSWORD RECOVERY
+// ============================================
+
+// Set security question for a user
+export const setSecurityQuestion = mutation({
+  args: {
+    userId: v.string(),
+    question: v.string(),
+    answer: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    // Hash the security answer (case-insensitive, trimmed)
+    const answerHash = await hashPassword(args.answer.toLowerCase().trim());
+
+    await ctx.db.patch(user._id, {
+      securityQuestion: args.question,
+      securityAnswerHash: answerHash,
+    } as any);
+
+    return { success: true };
   },
 });
+
+// Get security question for an email (only returns the question, not the answer)
+export const getSecurityQuestion = query({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .first();
+
+    if (!user || !user.securityQuestion) {
+      return { found: false, question: null };
+    }
+
+    return { found: true, question: user.securityQuestion };
+  },
+});
+
+// Reset password using security answer
+export const resetPasswordWithSecurityAnswer = mutation({
+  args: {
+    email: v.string(),
+    answer: v.string(),
+    newPassword: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .first();
+
+    if (!user) {
+      throw new Error("Benutzer nicht gefunden");
+    }
+
+    if (!user.securityAnswerHash) {
+      throw new Error("Keine Sicherheitsfrage eingerichtet");
+    }
+
+    // Verify the security answer (case-insensitive, trimmed)
+    const { valid } = await verifyPassword(
+      args.answer.toLowerCase().trim(),
+      user.securityAnswerHash
+    );
+
+    if (!valid) {
+      throw new Error("Falsche Sicherheitsantwort");
+    }
+
+    // Hash and save the new password
+    const newPasswordHash = await hashPassword(args.newPassword);
+    await ctx.db.patch(user._id, {
+      passwordHash: newPasswordHash,
+    } as any);
+
+    return { success: true };
+  },
+});
+
+

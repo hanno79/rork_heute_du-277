@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import colors from '@/constants/colors';
@@ -17,6 +18,7 @@ import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { login } = useAuth();
   const { alertState, showAlert, AlertComponent } = useCustomAlert();
@@ -48,6 +50,10 @@ export default function LoginScreen() {
     router.push('/auth/register');
   };
 
+  const navigateToForgotPassword = () => {
+    router.push('/auth/forgot-password');
+  };
+
   return (
     <KeyboardAvoidingView 
       style={styles.container} 
@@ -77,18 +83,38 @@ export default function LoginScreen() {
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Passwort</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Ihr Passwort"
-                placeholderTextColor={colors.lightText}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-                testID="password-input"
-              />
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Ihr Passwort"
+                  placeholderTextColor={colors.lightText}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isLoading}
+                  testID="password-input"
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={isLoading}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={24}
+                    color={colors.lightText}
+                  />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.forgotPasswordContainer}
+                onPress={navigateToForgotPassword}
+                disabled={isLoading}
+              >
+                <Text style={styles.forgotPasswordText}>Passwort vergessen?</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -166,6 +192,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     backgroundColor: '#F8F9FA',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: '#F8F9FA',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  forgotPasswordContainer: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
   },
   loginButton: {
     backgroundColor: colors.primary,

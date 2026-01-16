@@ -111,6 +111,8 @@ function RootLayoutNav() {
             <Stack.Screen name="quote/[id]" options={{ headerShown: true }} />
             <Stack.Screen name="auth/login" options={{ headerShown: true, title: "Anmelden" }} />
             <Stack.Screen name="auth/register" options={{ headerShown: true, title: "Registrieren" }} />
+            <Stack.Screen name="auth/forgot-password" options={{ headerShown: true, title: "Passwort zurücksetzen" }} />
+            <Stack.Screen name="security-question" options={{ headerShown: true, title: "Sicherheitsfrage" }} />
             <Stack.Screen name="disclaimer" options={{ headerShown: true }} />
           </Stack>
         </FavoritesProvider>
