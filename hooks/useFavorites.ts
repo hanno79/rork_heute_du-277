@@ -72,13 +72,17 @@ const getCompleteQuoteData = (quoteId: string, basicQuoteData: any, currentLangu
 export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   const [favorites, setFavorites] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, tokens } = useAuth();
   const { currentLanguage } = useLanguage();
 
+  // SECURITY: Get session token for API authorization
+  const sessionToken = tokens?.sessionToken || '';
+
   // Convex queries and mutations
+  // SECURITY: Session token is required for all favorites operations
   const convexFavorites = useQuery(
     api.quotes.getFavorites,
-    USE_CONVEX && user?.id ? { userId: user.id } : "skip"
+    USE_CONVEX && user?.id && sessionToken ? { userId: user.id, sessionToken } : "skip"
   );
   const addFavoriteMutation = useMutation(api.quotes.addFavorite);
   const removeFavoriteMutation = useMutation(api.quotes.removeFavorite);
@@ -145,7 +149,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   };
 
   const addToFavorites = async (quote: Quote) => {
-    if (!user || !isAuthenticated) {
+    if (!user || !isAuthenticated || !sessionToken) {
       return;
     }
 
@@ -155,9 +159,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     // Check if the quote has a valid Convex ID
     if (USE_CONVEX && hasConvexId(quoteWithId)) {
       try {
+        // SECURITY: Include session token for authorization
         await addFavoriteMutation({
           userId: user.id,
           quoteId: convexId,
+          sessionToken,
         });
       } catch (error) {
         // Fallback to local storage
@@ -172,7 +178,7 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
   };
 
   const removeFromFavorites = async (quote: Quote) => {
-    if (!user || !isAuthenticated) {
+    if (!user || !isAuthenticated || !sessionToken) {
       return;
     }
 
@@ -182,9 +188,11 @@ export const [FavoritesProvider, useFavorites] = createContextHook(() => {
     // Check if the quote has a valid Convex ID
     if (USE_CONVEX && hasConvexId(quoteWithId)) {
       try {
+        // SECURITY: Include session token for authorization
         await removeFavoriteMutation({
           userId: user.id,
           quoteId: convexId,
+          sessionToken,
         });
       } catch (error) {
         // Fallback to local storage

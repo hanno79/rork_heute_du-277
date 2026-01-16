@@ -182,18 +182,46 @@ export const searchQuotes = query({
   },
 });
 
+// SECURITY: Helper to validate session token
+async function validateSessionToken(
+  ctx: any,
+  userId: string,
+  sessionToken: string
+): Promise<{ valid: boolean; error?: string }> {
+  const user = await ctx.db
+    .query("userProfiles")
+    .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+    .first();
+
+  if (!user) {
+    return { valid: false, error: "User not found" };
+  }
+
+  if (user.sessionToken !== sessionToken) {
+    return { valid: false, error: "Invalid session token" };
+  }
+
+  if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
+    return { valid: false, error: "Session expired" };
+  }
+
+  return { valid: true };
+}
+
 // Add to favorites
-// SECURITY NOTE: In production, use Convex Auth to validate that the requesting user
-// matches the userId parameter. Currently userId is passed from the client without
-// server-side verification. Consider implementing Convex Auth for proper authorization.
+// SECURITY: Requires valid session token for authorization
 export const addFavorite = mutation({
   args: {
     userId: v.string(),
     quoteId: v.id("quotes"),
+    sessionToken: v.string(), // SECURITY: Required for authorization
   },
   handler: async (ctx, args) => {
-    // TODO: Validate that ctx.auth.getUserIdentity() matches args.userId
-    // when Convex Auth is implemented
+    // SECURITY: Validate session token to prevent IDOR
+    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
+    if (!session.valid) {
+      return { success: false, error: session.error || "Unauthorized" };
+    }
 
     // Check if already favorited
     const existing = await ctx.db
@@ -217,14 +245,20 @@ export const addFavorite = mutation({
 });
 
 // Remove from favorites
-// SECURITY NOTE: See addFavorite for authorization considerations
+// SECURITY: Requires valid session token for authorization
 export const removeFavorite = mutation({
   args: {
     userId: v.string(),
     quoteId: v.id("quotes"),
+    sessionToken: v.string(), // SECURITY: Required for authorization
   },
   handler: async (ctx, args) => {
-    // TODO: Validate user identity when Convex Auth is implemented
+    // SECURITY: Validate session token to prevent IDOR
+    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
+    if (!session.valid) {
+      return { success: false, error: session.error || "Unauthorized" };
+    }
+
     const favorite = await ctx.db
       .query("userFavorites")
       .withIndex("by_user_and_quote", (q) =>
@@ -241,13 +275,27 @@ export const removeFavorite = mutation({
 });
 
 // Get user favorites
-// SECURITY NOTE: See addFavorite for authorization considerations
+// SECURITY: Requires valid session token for authorization
 export const getFavorites = query({
   args: {
     userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required for authorization
   },
   handler: async (ctx, args) => {
-    // TODO: Validate user identity when Convex Auth is implemented
+    // SECURITY: Validate session token to prevent IDOR
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!user || user.sessionToken !== args.sessionToken) {
+      return { favorites: [], error: "Unauthorized" };
+    }
+
+    if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
+      return { favorites: [], error: "Session expired" };
+    }
+
     const favorites = await ctx.db
       .query("userFavorites")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))

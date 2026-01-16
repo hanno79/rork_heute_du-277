@@ -4,12 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
-import * as Crypto from 'expo-crypto';
 
-// Generate cryptographically secure tokens using expo-crypto
-const generateSecureToken = (): string => {
-  return Crypto.randomUUID() + Crypto.randomUUID();
-};
+// SECURITY NOTE: Token generation now happens server-side in Convex
+// The server returns sessionToken and sessionExpiresAt on login/register
 
 interface User {
   id: string;
@@ -21,9 +18,8 @@ interface User {
 }
 
 interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
+  sessionToken: string;  // SECURITY: Server-generated session token
+  expiresAt: number;     // Token expiration timestamp
 }
 
 interface AuthState {
@@ -146,11 +142,16 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
         };
 
-        // Generate cryptographically secure tokens
+        // SECURITY: Use server-generated session token instead of client-side generation
+        const resultAny = result as any;
+        if (!resultAny.sessionToken || !resultAny.sessionExpiresAt) {
+          setAuthState(prev => ({ ...prev, isLoading: false }));
+          return { success: false, error: 'Server-Authentifizierung fehlgeschlagen' };
+        }
+
         const tokens: AuthTokens = {
-          accessToken: generateSecureToken(),
-          refreshToken: generateSecureToken(),
-          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+          sessionToken: resultAny.sessionToken,
+          expiresAt: resultAny.sessionExpiresAt,
         };
 
         await saveAuthData(user, tokens);
@@ -212,11 +213,16 @@ export const [AuthContext, useAuth] = createContextHook(() => {
           updatedAt: creationTime ? new Date(creationTime).toISOString() : new Date().toISOString(),
         };
 
-        // Generate cryptographically secure tokens
+        // SECURITY: Use server-generated session token instead of client-side generation
+        const resultAny = result as any;
+        if (!resultAny.sessionToken || !resultAny.sessionExpiresAt) {
+          setAuthState(prev => ({ ...prev, isLoading: false }));
+          return { success: false, error: 'Server-Authentifizierung fehlgeschlagen' };
+        }
+
         const tokens: AuthTokens = {
-          accessToken: generateSecureToken(),
-          refreshToken: generateSecureToken(),
-          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+          sessionToken: resultAny.sessionToken,
+          expiresAt: resultAny.sessionExpiresAt,
         };
 
         await saveAuthData(user, tokens);
@@ -238,8 +244,25 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     }
   };
 
+  // Convex logout mutation
+  const logoutMutation = useMutation(api.auth.logout);
+
   const logout = async () => {
     try {
+      // SECURITY: Invalidate session token on server before clearing local data
+      if (authState.user && authState.tokens) {
+        try {
+          await logoutMutation({
+            userId: authState.user.id,
+            sessionToken: authState.tokens.sessionToken,
+          });
+        } catch (serverError) {
+          // Log server logout error but continue with local logout
+          console.error('[AuthProvider] Server logout failed:', {
+            error: serverError instanceof Error ? serverError.message : 'Unknown error',
+          });
+        }
+      }
       await clearAuthData();
     } catch (error) {
       // Log error for debugging (no sensitive data)

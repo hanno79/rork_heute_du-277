@@ -78,12 +78,27 @@ export const createSubscription = action({
 });
 
 // Cancel subscription
+// SECURITY: Verifies user owns the subscription before canceling
 export const cancelSubscription = action({
   args: {
     userId: v.string(),
     subscriptionId: v.string(),
   },
   handler: async (ctx, args) => {
+    // SECURITY: Verify the user owns this subscription
+    const profile = await ctx.runQuery(api.auth.getCurrentUser, {
+      userId: args.userId,
+    });
+
+    if (!profile) {
+      throw new Error("User not found");
+    }
+
+    // Verify the subscription belongs to this user
+    if (profile.stripeSubscriptionId !== args.subscriptionId) {
+      throw new Error("Unauthorized: Subscription does not belong to this user");
+    }
+
     const stripe = getStripe();
 
     const subscriptionResponse = await stripe.subscriptions.update(

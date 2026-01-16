@@ -140,7 +140,107 @@ function validatePassword(password: string): { valid: boolean; errors: string[] 
   return { valid: errors.length === 0, errors };
 }
 
+// Input length validation helper
+function validateInputLengths(args: { name?: string; email?: string; password?: string }): { valid: boolean; error?: string } {
+  if (args.name && args.name.length > 100) {
+    return { valid: false, error: "Name zu lang (max. 100 Zeichen)" };
+  }
+  if (args.email && args.email.length > 255) {
+    return { valid: false, error: "E-Mail zu lang (max. 255 Zeichen)" };
+  }
+  if (args.password && args.password.length > 128) {
+    return { valid: false, error: "Passwort zu lang (max. 128 Zeichen)" };
+  }
+  return { valid: true };
+}
+
+// Rate limiting helper - check if action is blocked
+async function checkRateLimit(
+  ctx: any,
+  email: string,
+  actionType: 'login' | 'register' | 'reset'
+): Promise<{ blocked: boolean; remainingMinutes?: number }> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const key = `${actionType}:${normalizedEmail}`;
+
+  const attempt = await ctx.db
+    .query("loginAttempts")
+    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .first();
+
+  if (attempt?.lockedUntil && attempt.lockedUntil > Date.now()) {
+    const remainingMinutes = Math.ceil((attempt.lockedUntil - Date.now()) / 60000);
+    return { blocked: true, remainingMinutes };
+  }
+
+  return { blocked: false };
+}
+
+// Rate limiting helper - record failed attempt
+async function recordFailedAttempt(
+  ctx: any,
+  email: string,
+  actionType: 'login' | 'register' | 'reset'
+): Promise<void> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const key = `${actionType}:${normalizedEmail}`;
+  const now = Date.now();
+
+  const attempt = await ctx.db
+    .query("loginAttempts")
+    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .first();
+
+  if (attempt) {
+    const newAttempts = attempt.attempts + 1;
+    const shouldLock = newAttempts >= MAX_LOGIN_ATTEMPTS;
+    await ctx.db.patch(attempt._id, {
+      attempts: newAttempts,
+      lastAttempt: now,
+      lockedUntil: shouldLock ? now + LOCKOUT_DURATION : undefined,
+    });
+  } else {
+    await ctx.db.insert("loginAttempts", {
+      email: key,
+      attempts: 1,
+      lastAttempt: now,
+    });
+  }
+}
+
+// Rate limiting helper - clear attempts after success
+async function clearRateLimitAttempts(
+  ctx: any,
+  email: string,
+  actionType: 'login' | 'register' | 'reset'
+): Promise<void> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const key = `${actionType}:${normalizedEmail}`;
+
+  const attempt = await ctx.db
+    .query("loginAttempts")
+    .withIndex("by_email", (q: any) => q.eq("email", key))
+    .first();
+
+  if (attempt) {
+    await ctx.db.delete(attempt._id);
+  }
+}
+
+// SECURITY: Generate cryptographically secure session token
+// Token format: 64 hex chars (256 bits of entropy)
+function generateSessionToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// Session token expiration time: 24 hours
+const SESSION_TOKEN_EXPIRY = 24 * 60 * 60 * 1000;
+
 // Register new user
+// SECURITY: Rate-limited and input-validated
 export const register = mutation({
   args: {
     email: v.string(),
@@ -148,6 +248,22 @@ export const register = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    // SECURITY: Input length validation to prevent abuse
+    const lengthValidation = validateInputLengths(args);
+    if (!lengthValidation.valid) {
+      return { success: false, error: lengthValidation.error, user: null };
+    }
+
+    // SECURITY: Check rate limiting for registration attempts
+    const rateLimit = await checkRateLimit(ctx, args.email, 'register');
+    if (rateLimit.blocked) {
+      return {
+        success: false,
+        error: `Zu viele Registrierungsversuche. Bitte versuchen Sie es in ${rateLimit.remainingMinutes} Minuten erneut.`,
+        user: null,
+      };
+    }
+
     // Validate password on backend (same rules as frontend)
     const passwordValidation = validatePassword(args.password);
     if (!passwordValidation.valid) {
@@ -165,7 +281,8 @@ export const register = mutation({
       .first();
 
     if (existingUser) {
-      // Generic error message to prevent user enumeration
+      // SECURITY: Record failed attempt and return generic error to prevent enumeration
+      await recordFailedAttempt(ctx, args.email, 'register');
       return { success: false, error: "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.", user: null };
     }
 
@@ -175,13 +292,19 @@ export const register = mutation({
     // Create a unique user ID
     const userId = crypto.randomUUID();
 
-    // Create user profile
+    // SECURITY: Generate server-side session token
+    const sessionToken = generateSessionToken();
+    const sessionExpiresAt = Date.now() + SESSION_TOKEN_EXPIRY;
+
+    // Create user profile with session token
     const profileId = await ctx.db.insert("userProfiles", {
       userId,
       name: args.name,
       email: args.email,
       isPremium: false,
       passwordHash,
+      sessionToken,
+      sessionExpiresAt,
     } as any);
 
     // Create default settings
@@ -197,9 +320,12 @@ export const register = mutation({
     // Get the created profile
     const profile = await ctx.db.get(profileId);
 
+    // SECURITY: Return session token to client for API authorization
     return {
       success: true,
       user: profile,
+      sessionToken,
+      sessionExpiresAt,
     };
   },
 });
@@ -277,12 +403,24 @@ export const login = mutation({
       await ctx.db.delete(loginAttempt._id);
     }
 
+    // SECURITY: Generate new server-side session token on each login
+    const sessionToken = generateSessionToken();
+    const sessionExpiresAt = Date.now() + SESSION_TOKEN_EXPIRY;
+
+    // Update user with new session token and migrate hash if needed
+    const updates: any = {
+      sessionToken,
+      sessionExpiresAt,
+    };
+
     // Migrate legacy SHA-256 hash to PBKDF2 on successful login
     if (needsMigration) {
-      const newHash = await hashPassword(args.password);
-      await ctx.db.patch(user._id, { passwordHash: newHash } as any);
+      updates.passwordHash = await hashPassword(args.password);
     }
 
+    await ctx.db.patch(user._id, updates);
+
+    // SECURITY: Return session token to client for API authorization
     return {
       success: true,
       user: {
@@ -291,6 +429,8 @@ export const login = mutation({
         name: user.name,
         isPremium: user.isPremium,
       },
+      sessionToken,
+      sessionExpiresAt,
     };
   },
 });
@@ -552,6 +692,7 @@ export const setSecurityQuestion = mutation({
 });
 
 // Get security question for an email (only returns the question, not the answer)
+// SECURITY: Always returns a question to prevent user enumeration
 export const getSecurityQuestion = query({
   args: {
     email: v.string(),
@@ -562,8 +703,14 @@ export const getSecurityQuestion = query({
       .withIndex("by_email", (q) => q.eq("email", args.email))
       .first();
 
+    // SECURITY: Always return found=true to prevent email enumeration
+    // If user doesn't exist or has no security question, return a generic question
+    // The actual verification happens in resetPasswordWithSecurityAnswer
     if (!user || !user.securityQuestion) {
-      return { found: false, question: null };
+      return {
+        found: true,
+        question: "Was ist Ihr Lieblingsort?" // Generic fallback
+      };
     }
 
     return { found: true, question: user.securityQuestion };
@@ -571,6 +718,7 @@ export const getSecurityQuestion = query({
 });
 
 // Reset password using security answer
+// SECURITY: Rate-limited to prevent brute-force attacks
 export const resetPasswordWithSecurityAnswer = mutation({
   args: {
     email: v.string(),
@@ -581,17 +729,28 @@ export const resetPasswordWithSecurityAnswer = mutation({
     // Generic error message to prevent user enumeration
     const genericError = "Passwort-Reset fehlgeschlagen. Bitte überprüfen Sie Ihre Angaben.";
 
+    // SECURITY: Check rate limiting for password reset attempts
+    const rateLimit = await checkRateLimit(ctx, args.email, 'reset');
+    if (rateLimit.blocked) {
+      return {
+        success: false,
+        error: `Zu viele Reset-Versuche. Bitte versuchen Sie es in ${rateLimit.remainingMinutes} Minuten erneut.`,
+      };
+    }
+
     const user = await ctx.db
       .query("userProfiles")
       .withIndex("by_email", (q) => q.eq("email", args.email))
       .first();
 
     if (!user) {
-      // Return same error for all failure cases to prevent enumeration
+      // SECURITY: Record failed attempt and return generic error
+      await recordFailedAttempt(ctx, args.email, 'reset');
       return { success: false, error: genericError };
     }
 
     if (!user.securityAnswerHash) {
+      await recordFailedAttempt(ctx, args.email, 'reset');
       return { success: false, error: genericError };
     }
 
@@ -602,6 +761,8 @@ export const resetPasswordWithSecurityAnswer = mutation({
     );
 
     if (!valid) {
+      // SECURITY: Record failed attempt for wrong answer
+      await recordFailedAttempt(ctx, args.email, 'reset');
       return { success: false, error: genericError };
     }
 
@@ -618,6 +779,75 @@ export const resetPasswordWithSecurityAnswer = mutation({
     const newPasswordHash = await hashPassword(args.newPassword);
     await ctx.db.patch(user._id, {
       passwordHash: newPasswordHash,
+    } as any);
+
+    // SECURITY: Clear rate limit attempts after successful reset
+    await clearRateLimitAttempts(ctx, args.email, 'reset');
+
+    return { success: true };
+  },
+});
+
+// ============================================
+// SESSION VALIDATION
+// ============================================
+
+// SECURITY: Validate session token for API authorization
+// Used by other modules (quotes, favorites) to verify user identity
+export const validateSession = query({
+  args: {
+    userId: v.string(),
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!user) {
+      return { valid: false, reason: "user_not_found" };
+    }
+
+    // Check if session token matches
+    if (user.sessionToken !== args.sessionToken) {
+      return { valid: false, reason: "invalid_token" };
+    }
+
+    // Check if session has expired
+    if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
+      return { valid: false, reason: "token_expired" };
+    }
+
+    return { valid: true, userId: user.userId };
+  },
+});
+
+// SECURITY: Logout - invalidate session token
+export const logout = mutation({
+  args: {
+    userId: v.string(),
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (!user) {
+      return { success: false, error: "User not found" };
+    }
+
+    // Verify the session token before invalidating
+    if (user.sessionToken !== args.sessionToken) {
+      return { success: false, error: "Invalid session" };
+    }
+
+    // Clear session token
+    await ctx.db.patch(user._id, {
+      sessionToken: undefined,
+      sessionExpiresAt: undefined,
     } as any);
 
     return { success: true };

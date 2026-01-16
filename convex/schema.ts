@@ -48,6 +48,9 @@ export default defineSchema({
     // Security question for password recovery
     securityQuestion: v.optional(v.string()),         // The selected security question
     securityAnswerHash: v.optional(v.string()),       // PBKDF2 hashed answer
+    // Session token for API authorization (SECURITY: server-generated tokens)
+    sessionToken: v.optional(v.string()),             // Server-generated session token
+    sessionExpiresAt: v.optional(v.number()),         // Token expiration timestamp
   })
     .index("by_userId", ["userId"])
     .index("by_email", ["email"])
