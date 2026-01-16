@@ -78,13 +78,24 @@ export const createSubscription = action({
 });
 
 // Cancel subscription
-// SECURITY: Verifies user owns the subscription before canceling
+// SECURITY: Requires session token AND verifies user owns the subscription
 export const cancelSubscription = action({
   args: {
     userId: v.string(),
     subscriptionId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required for authorization
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session token first
+    const session = await ctx.runQuery(api.auth.validateSession, {
+      userId: args.userId,
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid) {
+      throw new Error("Unauthorized: Invalid or expired session");
+    }
+
     // SECURITY: Verify the user owns this subscription
     const profile = await ctx.runQuery(api.auth.getCurrentUser, {
       userId: args.userId,
