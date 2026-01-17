@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.rork.bibel-spruch-finder",
+      "bundleIdentifier": "app.rork.bibelspruchfinder",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -32,11 +32,13 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.bibel-spruch-finder",
+      "package": "app.rork.bibelspruchfinder",
       "permissions": [
         "RECORD_AUDIO",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.SCHEDULE_EXACT_ALARM"
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -77,13 +79,22 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "string | string[]",
-          "enableGooglePay": "boolean"
+          "merchantIdentifier": "merchant.app.rork.heutedu",
+          "enableGooglePay": true
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": "https://rork.com/"
+      },
+      "eas": {
+        "projectId": "2a621ab0-92d3-4fac-a11a-dfcfe83d93c4"
+      }
+    },
+    "owner": "hanno"
   }
 }
