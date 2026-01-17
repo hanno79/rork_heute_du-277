@@ -1,24 +1,75 @@
-import { query, mutation } from "./_generated/server";
+import { query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import { api } from "./_generated/api";
+import { Doc, Id } from "./_generated/dataModel";
+import { SessionValidationResult } from "./utils/types";
+
+// Type for quote history entry
+type QuoteHistoryEntry = {
+  shownAt: string; // ISO date string (YYYY-MM-DD)
+  quote: {
+    _id: Id<"quotes">;
+    text?: string;
+    author?: string;
+    reference?: string;
+    category?: string;
+    context?: string;
+    explanation?: string;
+    situations?: string[];
+    tags?: string[];
+    translations?: Record<string, unknown>;
+  } | null;
+};
+
+// Type for search history entry
+type SearchHistoryEntry = {
+  searchQuery: string;
+  searchedAt: number;
+  quotes: Array<{
+    _id: Id<"quotes">;
+    text?: string;
+    author?: string;
+    reference?: string;
+    category?: string;
+    context?: string;
+    explanation?: string;
+    situations?: string[];
+    tags?: string[];
+    translations?: Record<string, unknown>;
+    relevanceScore?: number;
+  }>;
+};
 
 // Query: Get daily quote history for a user
 // Free users: last 3 days, Premium users: last 7 days
+// SECURITY: Validates sessionToken - userId derived from session, not trusted from client
 export const getDailyQuoteHistory = query({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(),
     limit: v.number() // 3 for free, 7 for premium
   },
-  handler: async (ctx, args) => {
-    const history = await ctx.db
+  handler: async (ctx, args): Promise<QuoteHistoryEntry[]> => {
+    // SECURITY: Validate session and get userId from server
+    const session: SessionValidationResult = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
+      return [];
+    }
+
+    const userId = session.userId;
+
+    const history: Doc<"userQuoteHistory">[] = await ctx.db
       .query("userQuoteHistory")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .order("desc")
       .take(args.limit);
 
     // Get quote details for each entry
-    const results = await Promise.all(
-      history.map(async (h) => {
-        const quote = await ctx.db.get(h.quoteId);
+    const results: QuoteHistoryEntry[] = await Promise.all(
+      history.map(async (h: Doc<"userQuoteHistory">): Promise<QuoteHistoryEntry> => {
+        const quote: Doc<"quotes"> | null = await ctx.db.get(h.quoteId);
         return {
           shownAt: h.shownAt,
           quote: quote ? {
@@ -31,82 +82,142 @@ export const getDailyQuoteHistory = query({
             explanation: quote.explanation,
             situations: quote.situations,
             tags: quote.tags,
-            translations: quote.translations,
+            translations: quote.translations as Record<string, unknown>,
           } : null,
         };
       })
     );
 
-    return results.filter((r) => r.quote !== null);
+    return results.filter((r: QuoteHistoryEntry): boolean => r.quote !== null);
   },
 });
 
 // Query: Get search history for a user (Premium only)
 // Returns last N searches with up to M quotes per search
+// SECURITY: Validates sessionToken - userId derived from session, not trusted from client
+// OPTIMIZATION: Uses batched queries to avoid N+1 pattern
 export const getSearchHistory = query({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(),
     searchLimit: v.number(), // Max 5 searches
     quotesPerSearch: v.number() // Max 3 quotes per search
   },
-  handler: async (ctx, args) => {
-    // Get user's search history
-    const searches = await ctx.db
+  handler: async (ctx, args): Promise<SearchHistoryEntry[]> => {
+    // SECURITY: Validate session and get userId from server
+    const session: SessionValidationResult = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
+      return [];
+    }
+
+    const userId = session.userId;
+
+    // Step 1: Get user's search history entries
+    const searches: Doc<"userSearchHistory">[] = await ctx.db
       .query("userSearchHistory")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .order("desc")
       .take(args.searchLimit);
 
-    // Get search context and associated quotes for each search
-    const results = await Promise.all(
-      searches.map(async (s) => {
-        const context = await ctx.db.get(s.searchContextId);
+    if (searches.length === 0) {
+      return [];
+    }
 
-        if (!context) {
-          return null;
-        }
-
-        // Get quote mappings for this search context
-        const mappings = await ctx.db
-          .query("quoteContextMappings")
-          .withIndex("by_context", (q) => q.eq("contextId", s.searchContextId))
-          .order("desc")
-          .take(args.quotesPerSearch);
-
-        // Get quote details
-        const quotes = await Promise.all(
-          mappings.map(async (m) => {
-            const quote = await ctx.db.get(m.quoteId);
-            return quote ? {
-              _id: quote._id,
-              text: quote.text,
-              author: quote.author,
-              reference: quote.reference,
-              category: quote.category,
-              context: quote.context,
-              explanation: quote.explanation,
-              situations: quote.situations,
-              tags: quote.tags,
-              translations: quote.translations,
-              relevanceScore: m.relevanceScore,
-            } : null;
-          })
-        );
-
-        return {
-          searchQuery: context.searchQuery,
-          searchedAt: s.searchedAt,
-          quotes: quotes.filter(Boolean),
-        };
-      })
+    // Step 2: Batch fetch all search contexts in parallel
+    const contextIds = searches.map(s => s.searchContextId);
+    const contexts = await Promise.all(
+      contextIds.map(id => ctx.db.get(id))
     );
 
-    return results.filter(Boolean);
+    // Create a map for quick context lookup
+    const contextMap = new Map<string, Doc<"searchContexts">>();
+    contexts.forEach((ctx, idx) => {
+      if (ctx) {
+        contextMap.set(contextIds[idx], ctx);
+      }
+    });
+
+    // Step 3: Batch fetch all quote mappings for all contexts
+    // We fetch mappings for each context in parallel (one query per context is unavoidable with index)
+    const allMappingsArrays = await Promise.all(
+      contextIds.map(contextId =>
+        ctx.db
+          .query("quoteContextMappings")
+          .withIndex("by_context", (q) => q.eq("contextId", contextId))
+          .order("desc")
+          .take(args.quotesPerSearch)
+      )
+    );
+
+    // Create a map of contextId -> mappings
+    const mappingsByContext = new Map<string, Doc<"quoteContextMappings">[]>();
+    contextIds.forEach((contextId, idx) => {
+      mappingsByContext.set(contextId, allMappingsArrays[idx]);
+    });
+
+    // Step 4: Collect all unique quote IDs and batch fetch quotes
+    const allQuoteIds = new Set<Id<"quotes">>();
+    allMappingsArrays.flat().forEach(m => allQuoteIds.add(m.quoteId));
+
+    const quoteIdArray = Array.from(allQuoteIds);
+    const allQuotes = await Promise.all(
+      quoteIdArray.map(id => ctx.db.get(id))
+    );
+
+    // Create a map for quick quote lookup
+    const quoteMap = new Map<string, Doc<"quotes">>();
+    allQuotes.forEach((quote, idx) => {
+      if (quote) {
+        quoteMap.set(quoteIdArray[idx], quote);
+      }
+    });
+
+    // Step 5: Reassemble the results using the pre-fetched data
+    const results: SearchHistoryEntry[] = [];
+
+    for (const search of searches) {
+      const context = contextMap.get(search.searchContextId);
+      if (!context) {
+        continue;
+      }
+
+      const mappings = mappingsByContext.get(search.searchContextId) || [];
+      const quotes = mappings
+        .map(m => {
+          const quote = quoteMap.get(m.quoteId);
+          if (!quote) return null;
+          return {
+            _id: quote._id,
+            text: quote.text,
+            author: quote.author,
+            reference: quote.reference,
+            category: quote.category,
+            context: quote.context,
+            explanation: quote.explanation,
+            situations: quote.situations,
+            tags: quote.tags,
+            translations: quote.translations as Record<string, unknown>,
+            relevanceScore: m.relevanceScore,
+          };
+        })
+        .filter((q): q is NonNullable<typeof q> => q !== null);
+
+      results.push({
+        searchQuery: context.searchQuery,
+        searchedAt: search.searchedAt,
+        quotes,
+      });
+    }
+
+    return results;
   },
 });
 
-// Mutation: Record a user's search in history
-export const recordUserSearch = mutation({
+// Internal Mutation: Record a user's search in history
+// SECURITY: internalMutation - only callable from other Convex functions, not from clients
+export const recordUserSearch = internalMutation({
   args: {
     userId: v.string(),
     searchContextId: v.id("searchContexts"),

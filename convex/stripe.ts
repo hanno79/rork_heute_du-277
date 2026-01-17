@@ -1,6 +1,6 @@
-import { action, mutation } from "./_generated/server";
+import { action, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import Stripe from "stripe";
 
 // Type-safe interface for Stripe subscription response fields we need
@@ -15,6 +15,22 @@ interface StripeSubscriptionFields {
   };
 }
 
+// Type for user profile returned by auth.getCurrentUser
+// This is a transformed view of Doc<"userProfiles"> with computed fields
+// Note: getCurrentUser returns a subset of fields with 'id' instead of 'userId'
+type CurrentUserProfile = {
+  id: string;  // Mapped from userId
+  email: string;
+  name: string;
+  isPremium: boolean;  // Computed: may differ from stored value if expired
+  premiumExpiresAt?: number;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripeSubscriptionStatus?: string;
+  subscriptionCanceledAt?: number;
+  subscriptionPlan?: string;
+};
+
 // Initialize Stripe
 const getStripe = () => {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
@@ -27,17 +43,31 @@ const getStripe = () => {
 };
 
 // Create subscription
+// SECURITY: Uses token-only validation - userId is derived from session, not trusted from client
 export const createSubscription = action({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required for authorization (replaces userId)
     priceId: v.string(),
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session by token ONLY - do NOT trust client-provided userId
+    const session = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid) {
+      throw new Error("Unauthorized: Invalid or expired session");
+    }
+
+    // SECURITY: Use server-derived userId from validated session
+    const userId = session.userId;
+
     const stripe = getStripe();
 
-    // Get user profile
-    const profile = await ctx.runQuery(api.auth.getCurrentUser, {
-      userId: args.userId,
+    // Get user profile using server-derived userId
+    // SECURITY: Uses internal query since userId is already server-validated
+    const profile: CurrentUserProfile | null = await ctx.runQuery(internal.auth.getCurrentUser, {
+      userId,
     });
 
     if (!profile) {
@@ -45,25 +75,25 @@ export const createSubscription = action({
     }
 
     // Get or create Stripe customer
-    let customerId = profile.stripeCustomerId;
+    let customerId: string | undefined = profile.stripeCustomerId;
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: profile.email,
         metadata: {
-          convex_user_id: args.userId,
+          convex_user_id: userId, // Use server-derived userId
         },
       });
       customerId = customer.id;
 
-      // Save customer ID
-      await ctx.runMutation(api.stripe.updateStripeCustomer, {
-        userId: args.userId,
+      // Save customer ID using server-derived userId
+      await ctx.runMutation(internal.stripe.updateStripeCustomer, {
+        userId,
         stripeCustomerId: customerId,
       });
     }
 
     // Create subscription
-    const subscription = await stripe.subscriptions.create({
+    const subscription: Stripe.Subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: args.priceId }],
       payment_behavior: "default_incomplete",
@@ -77,7 +107,8 @@ export const createSubscription = action({
       throw new Error("Invoice not expanded properly");
     }
 
-    const paymentIntent = invoice.payment_intent;
+    // Cast to access payment_intent from expanded invoice
+    const paymentIntent = (invoice as any).payment_intent;
     if (!paymentIntent || typeof paymentIntent === 'string') {
       throw new Error("Payment intent not expanded properly");
     }
@@ -129,7 +160,7 @@ export const cancelSubscription = action({
 
     // Update user profile using server-derived userId
     // IMPORTANT: Keep isPremium=true until period end, but mark as canceled
-    await ctx.runMutation(api.stripe.updatePremiumStatus, {
+    await ctx.runMutation(internal.stripe.updatePremiumStatus, {
       userId,
       isPremium: true, // User keeps premium until period end
       premiumExpiresAt: periodEnd * 1000,
@@ -175,7 +206,7 @@ export const handleStripeWebhook = action({
         if (convexUserId) {
           // Keep premium active if subscription is active, regardless of cancel_at_period_end
           const isActive = subscription.status === "active";
-          await ctx.runMutation(api.stripe.updatePremiumStatus, {
+          await ctx.runMutation(internal.stripe.updatePremiumStatus, {
             userId: convexUserId,
             isPremium: isActive,
             premiumExpiresAt: (subscription.current_period_end ?? 0) * 1000,
@@ -191,7 +222,7 @@ export const handleStripeWebhook = action({
         const convexUserId = subscription.metadata?.convex_user_id;
 
         if (convexUserId) {
-          await ctx.runMutation(api.stripe.updatePremiumStatus, {
+          await ctx.runMutation(internal.stripe.updatePremiumStatus, {
             userId: convexUserId,
             isPremium: false,
             premiumExpiresAt: null,
@@ -212,7 +243,7 @@ export const handleStripeWebhook = action({
 
           if (convexUserId) {
             // Payment succeeded - premium is active, check if still set to cancel
-            await ctx.runMutation(api.stripe.updatePremiumStatus, {
+            await ctx.runMutation(internal.stripe.updatePremiumStatus, {
               userId: convexUserId,
               isPremium: true,
               premiumExpiresAt: (subscription.current_period_end ?? 0) * 1000,
@@ -234,7 +265,7 @@ export const handleStripeWebhook = action({
           const convexUserId = subscription.metadata?.convex_user_id;
 
           if (convexUserId) {
-            await ctx.runMutation(api.stripe.updatePremiumStatus, {
+            await ctx.runMutation(internal.stripe.updatePremiumStatus, {
               userId: convexUserId,
               isPremium: false,
               premiumExpiresAt: null,
@@ -249,8 +280,9 @@ export const handleStripeWebhook = action({
   },
 });
 
-// Mutations for Stripe updates
-export const updateStripeCustomer = mutation({
+// Internal mutations for Stripe updates
+// SECURITY: These are internalMutation - only callable from other Convex functions, not from clients
+export const updateStripeCustomer = internalMutation({
   args: {
     userId: v.string(),
     stripeCustomerId: v.string(),
@@ -269,7 +301,7 @@ export const updateStripeCustomer = mutation({
   },
 });
 
-export const updatePremiumStatus = mutation({
+export const updatePremiumStatus = internalMutation({
   args: {
     userId: v.string(),
     isPremium: v.boolean(),

@@ -30,8 +30,26 @@ export default function QuoteDetailScreen() {
     );
   }
 
-  // Apply localization
-  const quote = quoteData;
+  // Normalize Convex quote to local Quote format
+  // Convex uses _id/category, local uses id/type
+  // Preserve _id for Convex operations (favorites, etc.)
+  const quote = {
+    id: quoteData._id,
+    _id: quoteData._id, // Preserve for Convex operations
+    text: quoteData.text,
+    reference: quoteData.reference || quoteData.author || '',
+    author: quoteData.author,
+    // Extract book name from reference, handling numbered books like "1. Mose 3:15"
+    book: quoteData.reference?.match(/^(\d+\.\s*)?[A-Za-zäöüÄÖÜß]+/)?.[0]?.trim(),
+    type: quoteData.category || 'quote',
+    context: quoteData.context || '',
+    explanation: quoteData.explanation || '',
+    situations: quoteData.situations || [],
+    tags: quoteData.tags || [],
+    translations: quoteData.translations || {},
+    reflectionQuestions: quoteData.reflectionQuestions || [],
+    practicalTips: quoteData.practicalTips || [],
+  };
 
   // Get localized content with proper typing
   const localizedQuote = quote.translations?.[currentLanguage];

@@ -13,13 +13,14 @@ import QuoteCard from '@/components/QuoteCard';
 
 export default function ReadingHistoryScreen() {
   const { t, currentLanguage } = useLanguage();
-  const { user, isAuthenticated } = useAuth();
+  const { user, tokens, isAuthenticated } = useAuth();
   const router = useRouter();
 
   // Query user's premium status from Convex
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const userProfile = useQuery(
-    api.auth.getCurrentUser,
-    user?.id ? { userId: user.id } : "skip"
+    api.auth.getCurrentUserBySession,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
   const isPremium = userProfile?.isPremium === true;
 
@@ -29,16 +30,18 @@ export default function ReadingHistoryScreen() {
   const quotesPerSearch = 3;
 
   // Query daily quote history
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const dailyQuoteHistory = useQuery(
     api.readingHistory.getDailyQuoteHistory,
-    user?.id ? { userId: user.id, limit: dailyQuoteLimit } : "skip"
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken, limit: dailyQuoteLimit } : "skip"
   );
 
   // Query search history (only for premium users)
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const searchHistory = useQuery(
     api.readingHistory.getSearchHistory,
-    user?.id && isPremium
-      ? { userId: user.id, searchLimit, quotesPerSearch }
+    tokens?.sessionToken && isPremium
+      ? { sessionToken: tokens.sessionToken, searchLimit, quotesPerSearch }
       : "skip"
   );
 

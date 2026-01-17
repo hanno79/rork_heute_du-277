@@ -13,6 +13,9 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAuth } from '@/providers/AuthProvider';
 
+// Default rate limit for AI searches (matches convex/search.ts DEFAULT_MAX_SEARCHES)
+const DEFAULT_RATE_LIMIT = 10;
+
 export default function SearchScreen() {
   const {
     searchQuotes,
@@ -27,18 +30,22 @@ export default function SearchScreen() {
   const { t } = useLanguage();
 
   // Use Convex as the single source of truth for premium status
-  const { user } = useAuth();
+  // SECURITY: Uses sessionToken for authentication instead of userId
+  const { tokens } = useAuth();
   const userProfile = useQuery(
-    api.auth.getCurrentUser,
-    user?.id ? { userId: user.id } : "skip"
+    api.auth.getCurrentUserBySession,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
   const isPremium = userProfile?.isPremium === true;
   const [hasSearched, setHasSearched] = useState(false);
 
   // Fetch rate limit directly from Convex for real-time display
+  // SECURITY: Uses sessionToken for authentication instead of userId
+  // NOTE: Query runs whenever sessionToken is present (not gated on isPremium)
+  // This avoids timing gaps while userProfile loads - UI decides what to show
   const rateLimitData = useQuery(
-    api.search.checkRateLimit,
-    user?.id && isPremium ? { userId: user.id } : "skip"
+    api.search.getRateLimitForUser,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
 
   const handleSearch = async (query: string) => {
@@ -66,14 +73,14 @@ export default function SearchScreen() {
         <PremiumBanner />
       )}
       
-      {/* Rate limit info for premium users - use rateLimitData for initial load, rateLimit for after search */}
+      {/* Rate limit info for premium users - only render when real data is available */}
       {isPremium && (rateLimitData || rateLimit) && (
         <View style={styles.rateLimitContainer}>
           <Sparkles size={16} color={(rateLimitData?.canUseAI ?? rateLimit?.canUseAI) ? colors.primary : colors.lightText} />
           <Text style={[typography.caption, styles.rateLimitText]}>
             {t('aiSearchesRemaining', {
-              remaining: rateLimitData?.remaining ?? rateLimit?.remaining ?? 10,
-              max: rateLimitData?.maxSearches ?? rateLimit?.maxSearches ?? 10
+              remaining: rateLimitData?.remaining ?? rateLimit?.remaining ?? DEFAULT_RATE_LIMIT,
+              max: rateLimitData?.maxSearches ?? rateLimit?.maxSearches ?? DEFAULT_RATE_LIMIT
             })}
           </Text>
         </View>

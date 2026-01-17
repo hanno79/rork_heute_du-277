@@ -143,14 +143,16 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_userId_and_date", ["userId", "searchedAt"]),
 
-  // Global daily quotes (one quote per day per language for ALL users)
+  // Global daily quotes (ONE quote per day for ALL users, regardless of language)
+  // The translation is applied client-side via applyLocalization
   dailyQuotes: defineTable({
     date: v.string(), // "2026-01-14" (ISO date string)
     quoteId: v.id("quotes"), // Reference to the quote
-    language: v.string(), // "de" or "en"
+    language: v.string(), // "global" for language-independent selection
     selectedAt: v.number(), // Timestamp when selected
   })
-    .index("by_date_language", ["date", "language"])
+    .index("by_date", ["date"]) // NEW: Primary index for global daily quote lookup
+    .index("by_date_language", ["date", "language"]) // Keep for backwards compatibility
     .index("by_language", ["language"]),
 
   // Synonym groups for semantic search matching

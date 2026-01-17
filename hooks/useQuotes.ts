@@ -9,10 +9,16 @@ import { useAuth } from '@/providers/AuthProvider';
 // Enable Convex features
 const USE_CONVEX = true;
 
+// Rate limit defaults (matches convex/search.ts)
+const DEFAULT_MAX_SEARCHES = 10;
+
 // Rate limit info type
+// Matches the RateLimitResult interface from convex/search.ts
 export interface RateLimitInfo {
+  searchCount?: number;  // Total searches today (optional for backwards compatibility)
   aiSearchCount: number;
   maxSearches: number;
+  canSearch?: boolean;   // Whether user can perform any search (optional)
   canUseAI: boolean;
   remaining: number;
 }
@@ -45,14 +51,16 @@ export default function useQuotes() {
     USE_CONVEX ? { language: currentLanguage, userId: user?.id } : "skip"
   );
 
-  const recordHistoryMutation = useMutation(api.quotes.recordQuoteHistory);
+  // Note: recordQuoteHistory is now an internalMutation (not callable from client)
+  // History recording is handled server-side in the daily quote flow
   const ensureDailyQuoteMutation = useMutation(api.quotes.ensureDailyQuote);
   const performSmartSearchAction = useAction(api.search.performSmartSearch);
 
   // Get user profile for premium status
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const userProfile = useQuery(
-    api.auth.getCurrentUser,
-    user?.id ? { userId: user.id } : "skip"
+    api.auth.getCurrentUserBySession,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
   const isPremium = userProfile?.isPremium === true;
 
@@ -66,6 +74,7 @@ export default function useQuotes() {
 
   // Get quote of the day when it's loaded from Convex
   // This handles the global daily quote system - same quote for all users
+  // NOTE: History recording is handled server-side via internalMutation to prevent IDOR vulnerabilities
   useEffect(() => {
     const handleDailyQuote = async () => {
       if (!dailyQuoteData) return; // Still loading
@@ -75,16 +84,6 @@ export default function useQuotes() {
         const localizedQuote = applyLocalization(dailyQuoteData.quote, currentLanguage);
         setQuoteOfTheDay(localizedQuote);
         setDailyQuoteInitialized(true);
-
-        // Record in history if user is logged in
-        if (user?.id && dailyQuoteData.quote._id) {
-          recordHistoryMutation({
-            userId: user.id,
-            quoteId: dailyQuoteData.quote._id as any,
-          }).catch(() => {});
-        }
-
-        // Cache locally
         cacheQuote(localizedQuote);
         return;
       }
@@ -101,16 +100,6 @@ export default function useQuotes() {
           if (result.quote) {
             const localizedQuote = applyLocalization(result.quote, currentLanguage);
             setQuoteOfTheDay(localizedQuote);
-
-            // Record in history if user is logged in
-            if (user?.id && result.quote._id) {
-              recordHistoryMutation({
-                userId: user.id,
-                quoteId: result.quote._id as any,
-              }).catch(() => {});
-            }
-
-            // Cache locally
             cacheQuote(localizedQuote);
           }
         } catch (error) {
@@ -125,17 +114,22 @@ export default function useQuotes() {
     };
 
     handleDailyQuote();
-  }, [dailyQuoteData, currentLanguage, user?.id, dailyQuoteInitialized]);
+  }, [dailyQuoteData, currentLanguage, dailyQuoteInitialized]);
 
-  // Reset initialized flag when language changes (need to get quote for new language)
+  // Re-apply localization when language changes (but DON'T reset the quote!)
+  // The daily quote is GLOBAL (same for all languages) - only the translation changes
   useEffect(() => {
-    setDailyQuoteInitialized(false);
-  }, [currentLanguage]);
+    if (quoteOfTheDay && dailyQuoteData?.quote) {
+      // Re-apply localization with new language to the SAME quote
+      const relocalizedQuote = applyLocalization(dailyQuoteData.quote, currentLanguage);
+      setQuoteOfTheDay(relocalizedQuote);
+    }
+  }, [currentLanguage, dailyQuoteData?.quote]);
 
-  // Fallback: Get quote from cache or local on mount
+  // Fallback: Get quote from cache or local on mount (only once, not on language change)
   useEffect(() => {
     getQuoteOfTheDay();
-  }, [currentLanguage]);
+  }, []);
 
   const loadDynamicQuotes = async () => {
     try {
@@ -314,8 +308,16 @@ export default function useQuotes() {
           setSearchSource(result.source || 'database');
 
           // Update rate limit info if available
-          if (result.rateLimit) {
-            setRateLimit(result.rateLimit);
+          // Safely convert Partial<RateLimitResult> to RateLimitInfo
+          if (result.rateLimit && typeof result.rateLimit.aiSearchCount === 'number') {
+            setRateLimit({
+              searchCount: result.rateLimit.searchCount,
+              aiSearchCount: result.rateLimit.aiSearchCount,
+              maxSearches: result.rateLimit.maxSearches ?? DEFAULT_MAX_SEARCHES,
+              canSearch: result.rateLimit.canSearch,
+              canUseAI: result.rateLimit.canUseAI ?? false,
+              remaining: result.rateLimit.remaining ?? 0,
+            });
           }
 
           return;

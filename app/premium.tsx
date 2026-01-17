@@ -60,9 +60,10 @@ export default function PremiumScreen() {
   const reactivateSubscriptionMutation = useMutation(api.auth.reactivateSubscription);
 
   // Query user's actual premium status from Convex - THIS IS THE SOURCE OF TRUTH
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const userProfile = useQuery(
-    api.auth.getCurrentUser,
-    user?.id ? { userId: user.id } : "skip"
+    api.auth.getCurrentUserBySession,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
 
   // Cancellation loading state

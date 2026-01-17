@@ -17,13 +17,14 @@ export default function ProfileScreen() {
   const { t, currentLanguage, setLanguage } = useLanguage();
   const { settings, capabilities, toggleEnabled } = useNotifications();
   const [showNotificationSettings, setShowNotificationSettings] = useState<boolean>(false);
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, tokens } = useAuth();
   const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   // Query premium status from Convex - this is the source of truth
+  // SECURITY: Uses sessionToken for authentication instead of userId
   const userProfile = useQuery(
-    api.auth.getCurrentUser,
-    user?.id ? { userId: user.id } : "skip"
+    api.auth.getCurrentUserBySession,
+    tokens?.sessionToken ? { sessionToken: tokens.sessionToken } : "skip"
   );
   const isPremium = userProfile?.isPremium === true;
   const subscriptionStatus = userProfile?.stripeSubscriptionStatus;

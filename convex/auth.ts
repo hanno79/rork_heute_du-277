@@ -1,5 +1,6 @@
-import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
+import { mutation, query, internalQuery, MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { timingSafeEqual, timingSafeEqualBytes } from "./utils/security";
 
 // Constants for rate limiting
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -44,22 +45,6 @@ async function hashPassword(password: string): Promise<string> {
   return Array.from(combined)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-// SECURITY: Timing-safe byte array comparison to prevent timing attacks
-function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
-  // If lengths differ, still do the comparison to maintain constant time
-  const maxLen = Math.max(a.length, b.length);
-  let result = a.length ^ b.length; // Will be non-zero if lengths differ
-
-  for (let i = 0; i < maxLen; i++) {
-    // Use 0 as fallback for out-of-bounds access to maintain constant time
-    const byteA = i < a.length ? a[i] : 0;
-    const byteB = i < b.length ? b[i] : 0;
-    result |= byteA ^ byteB;
-  }
-
-  return result === 0;
 }
 
 // Legacy SHA-256 hash verification (for migration)
@@ -262,32 +247,6 @@ function generateSessionToken(): string {
 // Session token expiration time: 24 hours
 const SESSION_TOKEN_EXPIRY = 24 * 60 * 60 * 1000;
 
-// SECURITY: Timing-safe string comparison to prevent timing attacks
-// Returns false if lengths differ, otherwise XORs char codes and returns result
-// Accepts null/undefined inputs which are normalized to empty strings
-function timingSafeEqual(a: string | null | undefined, b: string | null | undefined): boolean {
-  // Normalize null/undefined to empty string
-  const strA = a ?? '';
-  const strB = b ?? '';
-
-  // If lengths differ, still do the comparison to maintain constant time
-  // but remember that the result should be false
-  const lenA = strA.length;
-  const lenB = strB.length;
-  const maxLen = Math.max(lenA, lenB);
-
-  let result = lenA ^ lenB; // Will be non-zero if lengths differ
-
-  for (let i = 0; i < maxLen; i++) {
-    // Use 0 as fallback for out-of-bounds access to maintain constant time
-    const charA = i < lenA ? strA.charCodeAt(i) : 0;
-    const charB = i < lenB ? strB.charCodeAt(i) : 0;
-    result |= charA ^ charB;
-  }
-
-  return result === 0;
-}
-
 // Register new user
 // SECURITY: Rate-limited and input-validated
 export const register = mutation({
@@ -484,12 +443,33 @@ export const login = mutation({
   },
 });
 
-// Get current user profile by userId
-export const getCurrentUser = query({
+/**
+ * Get current user profile by userId
+ *
+ * @deprecated Use `getCurrentUserBySession` instead for client-facing queries.
+ * This function accepts userId directly which is less secure than session-based lookup.
+ * Migration: Replace calls with `getCurrentUserBySession({ sessionToken })` where userId
+ * is derived server-side from the validated session token.
+ *
+ * SECURITY: internalQuery - only callable from other Convex functions, not from clients.
+ * This is intentional to prevent IDOR attacks where clients could query any user's data.
+ *
+ * @param userId - The user ID to look up (server-validated, not from client)
+ * @returns User profile or null if not found
+ */
+export const getCurrentUser = internalQuery({
   args: {
     userId: v.string(),
   },
   handler: async (ctx, args) => {
+    // DEPRECATION TELEMETRY: Log usage to track callers for migration planning
+    // This helps identify which server functions still use this deprecated pattern
+    console.warn(
+      `[DEPRECATION] getCurrentUser called with userId. ` +
+      `Caller should migrate to getCurrentUserBySession. ` +
+      `userId prefix: ${args.userId.substring(0, 8)}...`
+    );
+
     const profile = await ctx.db
       .query("userProfiles")
       .filter((q) => q.eq(q.field("userId"), args.userId))
@@ -528,12 +508,33 @@ export const getCurrentUser = query({
   },
 });
 
-// Get user settings
-export const getUserSettings = query({
+/**
+ * Get user settings by userId
+ *
+ * @deprecated Use `getUserSettingsBySession` instead for client-facing queries.
+ * This function accepts userId directly which is less secure than session-based lookup.
+ * Migration: Replace calls with `getUserSettingsBySession({ sessionToken })` where userId
+ * is derived server-side from the validated session token.
+ *
+ * SECURITY: internalQuery - only callable from other Convex functions, not from clients.
+ * This is intentional to prevent IDOR attacks where clients could query any user's settings.
+ *
+ * @param userId - The user ID to look up (server-validated, not from client)
+ * @returns User settings or null if not found
+ */
+export const getUserSettings = internalQuery({
   args: {
     userId: v.string(),
   },
   handler: async (ctx, args) => {
+    // DEPRECATION TELEMETRY: Log usage to track callers for migration planning
+    // This helps identify which server functions still use this deprecated pattern
+    console.warn(
+      `[DEPRECATION] getUserSettings called with userId. ` +
+      `Caller should migrate to getUserSettingsBySession. ` +
+      `userId prefix: ${args.userId.substring(0, 8)}...`
+    );
+
     const settings = await ctx.db
       .query("userSettings")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
@@ -997,6 +998,76 @@ export const validateSessionByToken = query({
       stripeCustomerId: user.stripeCustomerId,
       stripeSubscriptionId: user.stripeSubscriptionId,
     };
+  },
+});
+
+// SECURITY: Get current user by session token (secure version)
+// This is the SECURE alternative to getCurrentUser - uses sessionToken instead of userId
+export const getCurrentUserBySession = query({
+  args: {
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId from server
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      return null;
+    }
+
+    const profile = await ctx.db
+      .query("userProfiles")
+      .filter((q) => q.eq(q.field("userId"), session.userId))
+      .first();
+
+    if (!profile) {
+      return null;
+    }
+
+    // Check if premium has expired (for canceled subscriptions)
+    let isPremiumActive = profile.isPremium;
+    if (
+      profile.isPremium &&
+      profile.stripeSubscriptionStatus === "canceled" &&
+      profile.premiumExpiresAt &&
+      profile.premiumExpiresAt < Date.now()
+    ) {
+      isPremiumActive = false;
+    }
+
+    return {
+      id: profile.userId,
+      email: profile.email,
+      name: profile.name,
+      isPremium: isPremiumActive,
+      premiumExpiresAt: profile.premiumExpiresAt,
+      stripeCustomerId: profile.stripeCustomerId,
+      stripeSubscriptionId: profile.stripeSubscriptionId,
+      stripeSubscriptionStatus: profile.stripeSubscriptionStatus,
+      subscriptionCanceledAt: profile.subscriptionCanceledAt,
+      subscriptionPlan: profile.subscriptionPlan,
+    };
+  },
+});
+
+// SECURITY: Get user settings by session token (secure version)
+// This is the SECURE alternative to getUserSettings - uses sessionToken instead of userId
+export const getUserSettingsBySession = query({
+  args: {
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId from server
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      return null;
+    }
+
+    const settings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", session.userId as string))
+      .first();
+
+    return settings;
   },
 });
 

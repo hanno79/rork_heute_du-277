@@ -1,4 +1,4 @@
-import { query, mutation, action, internalQuery } from "./_generated/server";
+import { query, mutation, action, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
@@ -15,6 +15,37 @@ interface RateLimitResult {
   canSearch: boolean;
   canUseAI: boolean;
   remaining: number;
+}
+
+// Type for smart search result
+interface SmartSearchResult {
+  source: "cached" | "category" | "database" | "insufficient";
+  quotes: any[];
+  contextId: Id<"searchContexts"> | null;
+  category: any;
+  rateLimit: Partial<RateLimitResult> | null;
+  needsAI: boolean;
+  normalizedQuery?: string;
+  synonymsUsed?: string[] | boolean;
+}
+
+// Type for AI generation result
+interface AIGenerationResult {
+  quotes: any[];
+  count: number;
+  contextId: Id<"searchContexts">;
+  wasAIGenerated: boolean;
+}
+
+// Type for performSmartSearch result
+interface PerformSmartSearchResult {
+  quotes: any[];
+  source: string;
+  rateLimit: RateLimitResult | Partial<RateLimitResult> | null;
+  wasAIGenerated: boolean;
+  category?: any;
+  contextId?: Id<"searchContexts">;
+  error?: string;
 }
 
 // Internal history periods - quotes can be reused after this period
@@ -65,8 +96,9 @@ function extractKeywords(query: string): string[] {
     .filter((word) => word.length > 2);
 }
 
-// Query: Check rate limit for user (both total searches and AI-specific)
-export const checkRateLimit = query({
+// Internal Query: Check rate limit for user (both total searches and AI-specific)
+// SECURITY: internalQuery - only callable from other Convex functions, not from clients
+export const checkRateLimit = internalQuery({
   args: {
     userId: v.string(),
   },
@@ -96,8 +128,33 @@ export const checkRateLimit = query({
   },
 });
 
-// Mutation: Increment search count (for ALL searches, not just AI)
-export const incrementSearchCount = mutation({
+// Public Query: Check rate limit for authenticated user
+// SECURITY: Validates sessionToken - userId derived from session, not trusted from client
+// NOTE: Delegates to checkRateLimit after session validation to avoid code duplication
+export const getRateLimitForUser = query({
+  args: {
+    sessionToken: v.string(),
+  },
+  handler: async (ctx, args): Promise<RateLimitResult | null> => {
+    // Validate session and get userId from server
+    const session = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
+      return null;
+    }
+
+    // Delegate to internal checkRateLimit to avoid duplicating rate-limit logic
+    return await ctx.runQuery(internal.search.checkRateLimit, {
+      userId: session.userId,
+    });
+  },
+});
+
+// Internal Mutation: Increment search count (for ALL searches, not just AI)
+// SECURITY: internalMutation - only callable from other Convex functions, not from clients
+export const incrementSearchCount = internalMutation({
   args: {
     userId: v.string(),
   },
@@ -131,8 +188,9 @@ export const incrementSearchCount = mutation({
   },
 });
 
-// Mutation: Increment AI search count (kept for AI-specific tracking)
-export const incrementAISearchCount = mutation({
+// Internal Mutation: Increment AI search count (kept for AI-specific tracking)
+// SECURITY: internalMutation - only callable from other Convex functions, not from clients
+export const incrementAISearchCount = internalMutation({
   args: {
     userId: v.string(),
   },
@@ -800,7 +858,7 @@ export const performSmartSearch = action({
     sessionToken: v.optional(v.string()), // SECURITY: Required for authenticated users
     // REMOVED: userId and isPremium - these are now derived from sessionToken server-side
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<PerformSmartSearchResult> => {
     // SECURITY: Validate session and get userId + isPremium from server
     let userId: string | undefined;
     let isPremium = false;
@@ -819,7 +877,7 @@ export const performSmartSearch = action({
     // This happens BEFORE the search to count attempts, not just successful searches
     if (userId) {
       // Check rate limit FIRST
-      const currentRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+      const currentRateLimit: RateLimitResult = await ctx.runQuery(internal.search.checkRateLimit, {
         userId: userId,
       });
 
@@ -835,13 +893,13 @@ export const performSmartSearch = action({
       }
 
       // Increment search count
-      await ctx.runMutation(api.search.incrementSearchCount, {
+      await ctx.runMutation(internal.search.incrementSearchCount, {
         userId: userId,
       });
     }
 
     // Step 1: Try smart search (DB-first approach)
-    const searchResult = await ctx.runQuery(api.search.smartSearch, {
+    const searchResult: SmartSearchResult = await ctx.runQuery(api.search.smartSearch, {
       query: args.query,
       language: args.language,
       userId: userId,
@@ -851,7 +909,7 @@ export const performSmartSearch = action({
     // Get updated rate limit after incrementing
     let updatedRateLimit = searchResult.rateLimit;
     if (userId) {
-      updatedRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+      updatedRateLimit = await ctx.runQuery(internal.search.checkRateLimit, {
         userId: userId,
       });
     }
@@ -881,7 +939,7 @@ export const performSmartSearch = action({
 
     // Step 4: Generate with AI
     try {
-      const aiResult = await ctx.runAction(api.aiQuotes.generateSearchQuotes, {
+      const aiResult: AIGenerationResult = await ctx.runAction(api.aiQuotes.generateSearchQuotes, {
         query: args.query,
         language: args.language,
         count: 5,
@@ -890,7 +948,7 @@ export const performSmartSearch = action({
       });
 
       // Get updated rate limit after AI generation
-      const rateLimitAfterAI: RateLimitResult = await ctx.runQuery(api.search.checkRateLimit, {
+      const rateLimitAfterAI: RateLimitResult = await ctx.runQuery(internal.search.checkRateLimit, {
         userId: userId,
       });
 

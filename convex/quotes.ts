@@ -1,51 +1,28 @@
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-
-// SECURITY: Timing-safe string comparison to prevent timing attacks
-// Returns false if lengths differ, otherwise XORs char codes and returns result
-// Accepts null/undefined inputs which are normalized to empty strings
-function timingSafeEqual(a: string | null | undefined, b: string | null | undefined): boolean {
-  // Normalize null/undefined to empty string
-  const strA = a ?? '';
-  const strB = b ?? '';
-
-  // If lengths differ, still do the comparison to maintain constant time
-  // but remember that the result should be false
-  const lenA = strA.length;
-  const lenB = strB.length;
-  const maxLen = Math.max(lenA, lenB);
-
-  let result = lenA ^ lenB; // Will be non-zero if lengths differ
-
-  for (let i = 0; i < maxLen; i++) {
-    // Use 0 as fallback for out-of-bounds access to maintain constant time
-    const charA = i < lenA ? strA.charCodeAt(i) : 0;
-    const charB = i < lenB ? strB.charCodeAt(i) : 0;
-    result |= charA ^ charB;
-  }
-
-  return result === 0;
-}
+import { api } from "./_generated/api";
+import { SessionValidationResult } from "./utils/types";
 
 // Days to avoid repeating a quote as "Quote of the Day"
 const DAILY_QUOTE_REPEAT_DAYS = 30;
 
 // Get daily quote - returns the SAME quote for ALL users on the same day
 // This ensures consistency: everyone sees the same "Quote of the Day"
+// WICHTIG: Das Zitat ist GLOBAL (ein Zitat pro Tag für alle Sprachen)
+// Die Übersetzung wird client-seitig via applyLocalization angewendet
 export const getDailyQuote = query({
   args: {
-    language: v.string(),
+    language: v.string(), // Nur für Logging, nicht für Selektion
     userId: v.optional(v.string()), // Optional - for recording history only
   },
   handler: async (ctx, args) => {
     const today = new Date().toISOString().split("T")[0]; // "2026-01-14"
 
-    // 1. Check if we already have a daily quote for today in this language
+    // 1. Check if we already have a daily quote for today (OHNE Sprachfilter!)
+    // Das globale Zitat des Tages wird für alle Sprachen verwendet
     const existingDaily = await ctx.db
       .query("dailyQuotes")
-      .withIndex("by_date_language", (q) =>
-        q.eq("date", today).eq("language", args.language)
-      )
+      .filter((q) => q.eq(q.field("date"), today))
       .first();
 
     if (existingDaily) {
@@ -64,19 +41,20 @@ export const getDailyQuote = query({
 
 // Ensure daily quote exists - selects and stores a quote for today if needed
 // This mutation is called by the client when no daily quote exists
+// WICHTIG: Wählt EIN globales Zitat pro Tag (für alle Sprachen)
+// Bevorzugt Zitate MIT Übersetzungen für bessere Multi-Language Support
 export const ensureDailyQuote = mutation({
   args: {
-    language: v.string(),
+    language: v.optional(v.string()), // Optional, nur für Fallback-Logik
   },
   handler: async (ctx, args) => {
     const today = new Date().toISOString().split("T")[0];
 
     // Double-check if already exists (race condition protection)
+    // OHNE Sprachfilter - globales Zitat pro Tag
     const existing = await ctx.db
       .query("dailyQuotes")
-      .withIndex("by_date_language", (q) =>
-        q.eq("date", today).eq("language", args.language)
-      )
+      .filter((q) => q.eq(q.field("date"), today))
       .first();
 
     if (existing) {
@@ -84,10 +62,9 @@ export const ensureDailyQuote = mutation({
       return { quote, alreadyExisted: true };
     }
 
-    // Get recent daily quotes to avoid repetition
+    // Get recent daily quotes to avoid repetition (alle Sprachen)
     const recentDailyQuotes = await ctx.db
       .query("dailyQuotes")
-      .withIndex("by_language", (q) => q.eq("language", args.language))
       .order("desc")
       .take(DAILY_QUOTE_REPEAT_DAYS);
 
@@ -96,10 +73,13 @@ export const ensureDailyQuote = mutation({
     // Get all available quotes
     const allQuotesInDb = await ctx.db.query("quotes").collect();
 
-    // Prioritize: 1) Quotes in user's language, 2) English quotes (have translations)
-    const quotesInUserLanguage = allQuotesInDb.filter((q) => q.language === args.language);
-    const englishQuotes = allQuotesInDb.filter((q) => q.language === "en");
-    const allQuotes = [...quotesInUserLanguage, ...englishQuotes];
+    // BEVORZUGE Zitate MIT Übersetzungen (für bessere Multi-Language Support)
+    const quotesWithTranslations = allQuotesInDb.filter((q) =>
+      q.translations && typeof q.translations === 'object' && Object.keys(q.translations).length > 0
+    );
+
+    // Fallback: Alle Zitate wenn keine mit Übersetzungen verfügbar
+    const allQuotes = quotesWithTranslations.length > 0 ? quotesWithTranslations : allQuotesInDb;
 
     // Remove duplicates
     const seenTexts = new Set<string>();
@@ -122,11 +102,11 @@ export const ensureDailyQuote = mutation({
     const randomIndex = Math.floor(Math.random() * candidates.length);
     const selectedQuote = candidates[randomIndex];
 
-    // Store as today's daily quote
+    // Store as today's daily quote (OHNE Sprache - global)
     await ctx.db.insert("dailyQuotes", {
       date: today,
       quoteId: selectedQuote._id,
-      language: args.language,
+      language: "global", // Marker für globales Zitat
       selectedAt: Date.now(),
     });
 
@@ -135,7 +115,9 @@ export const ensureDailyQuote = mutation({
 });
 
 // Record quote in history
-export const recordQuoteHistory = mutation({
+// SECURITY: internalMutation - only callable from other Convex functions, not from clients
+// This prevents unauthorized users from recording history for other users
+export const recordQuoteHistory = internalMutation({
   args: {
     userId: v.string(),
     quoteId: v.id("quotes"),
@@ -229,53 +211,30 @@ export const searchQuotes = query({
   },
 });
 
-// SECURITY: Helper to validate session token
-async function validateSessionToken(
-  ctx: any,
-  userId: string,
-  sessionToken: string
-): Promise<{ valid: boolean; error?: string }> {
-  const user = await ctx.db
-    .query("userProfiles")
-    .withIndex("by_userId", (q: any) => q.eq("userId", userId))
-    .first();
-
-  if (!user) {
-    return { valid: false, error: "User not found" };
-  }
-
-  // SECURITY: Use timing-safe comparison to prevent timing attacks
-  if (!timingSafeEqual(user.sessionToken, sessionToken)) {
-    return { valid: false, error: "Invalid session token" };
-  }
-
-  if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
-    return { valid: false, error: "Session expired" };
-  }
-
-  return { valid: true };
-}
-
 // Add to favorites
-// SECURITY: Requires valid session token for authorization
+// SECURITY: Uses sessionToken-only validation - userId derived from session, not trusted from client
 export const addFavorite = mutation({
   args: {
-    userId: v.string(),
     quoteId: v.id("quotes"),
-    sessionToken: v.string(), // SECURITY: Required for authorization
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
   },
   handler: async (ctx, args) => {
-    // SECURITY: Validate session token to prevent IDOR
-    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
-    if (!session.valid) {
+    // SECURITY: Validate session and get userId from server - NEVER trust client-provided userId
+    const session: SessionValidationResult = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
       return { success: false, error: session.error || "Unauthorized" };
     }
+
+    const userId = session.userId;
 
     // Check if already favorited
     const existing = await ctx.db
       .query("userFavorites")
       .withIndex("by_user_and_quote", (q) =>
-        q.eq("userId", args.userId).eq("quoteId", args.quoteId)
+        q.eq("userId", userId).eq("quoteId", args.quoteId)
       )
       .first();
 
@@ -284,7 +243,7 @@ export const addFavorite = mutation({
     }
 
     await ctx.db.insert("userFavorites", {
-      userId: args.userId,
+      userId,
       quoteId: args.quoteId,
     });
 
@@ -293,24 +252,28 @@ export const addFavorite = mutation({
 });
 
 // Remove from favorites
-// SECURITY: Requires valid session token for authorization
+// SECURITY: Uses sessionToken-only validation - userId derived from session, not trusted from client
 export const removeFavorite = mutation({
   args: {
-    userId: v.string(),
     quoteId: v.id("quotes"),
-    sessionToken: v.string(), // SECURITY: Required for authorization
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
   },
   handler: async (ctx, args) => {
-    // SECURITY: Validate session token to prevent IDOR
-    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
-    if (!session.valid) {
+    // SECURITY: Validate session and get userId from server - NEVER trust client-provided userId
+    const session: SessionValidationResult = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
       return { success: false, error: session.error || "Unauthorized" };
     }
+
+    const userId = session.userId;
 
     const favorite = await ctx.db
       .query("userFavorites")
       .withIndex("by_user_and_quote", (q) =>
-        q.eq("userId", args.userId).eq("quoteId", args.quoteId)
+        q.eq("userId", userId).eq("quoteId", args.quoteId)
       )
       .first();
 
@@ -323,22 +286,26 @@ export const removeFavorite = mutation({
 });
 
 // Get user favorites
-// SECURITY: Requires valid session token for authorization
+// SECURITY: Uses sessionToken-only validation - userId derived from session, not trusted from client
 export const getFavorites = query({
   args: {
-    userId: v.string(),
-    sessionToken: v.string(), // SECURITY: Required for authorization
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
   },
   handler: async (ctx, args) => {
-    // SECURITY: Validate session token to prevent IDOR
-    const session = await validateSessionToken(ctx, args.userId, args.sessionToken);
-    if (!session.valid) {
+    // SECURITY: Validate session and get userId from server - NEVER trust client-provided userId
+    const session: SessionValidationResult = await ctx.runQuery(api.auth.validateSessionByToken, {
+      sessionToken: args.sessionToken,
+    });
+
+    if (!session.valid || !session.userId) {
       return { favorites: [], error: session.error || "Unauthorized" };
     }
 
+    const userId = session.userId;
+
     const favorites = await ctx.db
       .query("userFavorites")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
       .collect();
 
     // Fetch quote details
