@@ -32,7 +32,7 @@ export default function RegisterScreen() {
   const [showSecurityModal, setShowSecurityModal] = useState<boolean>(false);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [securityAnswer, setSecurityAnswer] = useState<string>('');
-  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+  const [registeredSessionToken, setRegisteredSessionToken] = useState<string | null>(null);
 
   const { register } = useAuth();
   const setSecurityQuestionMutation = useMutation(api.auth.setSecurityQuestion);
@@ -84,9 +84,9 @@ export default function RegisterScreen() {
       const result = await register(email.trim(), password, name.trim());
 
       if (result.success) {
-        // Store the user ID and show security question modal
-        if (result.userId) {
-          setRegisteredUserId(result.userId);
+        // Store the session token and show security question modal
+        if (result.sessionToken) {
+          setRegisteredSessionToken(result.sessionToken);
           setShowSecurityModal(true);
         } else {
           // Fallback if no userId returned - go directly to app
@@ -129,7 +129,8 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (!registeredUserId) {
+    // SECURITY: Validate session token before saving
+    if (!registeredSessionToken) {
       setShowSecurityModal(false);
       router.replace('/(tabs)');
       return;
@@ -138,7 +139,7 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       await setSecurityQuestionMutation({
-        userId: registeredUserId,
+        sessionToken: registeredSessionToken, // SECURITY: Use session token instead of userId
         question: selectedQuestion,
         answer: securityAnswer.trim(),
       });

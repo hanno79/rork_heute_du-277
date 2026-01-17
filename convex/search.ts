@@ -792,20 +792,35 @@ export const findSynonyms = query({
 
 // Action: Perform smart search with DB-first, then AI fallback
 // This is the main entry point for client-side search
+// SECURITY: Uses sessionToken for authorization - isPremium is derived from validated session, not trusted from client
 export const performSmartSearch = action({
   args: {
     query: v.string(),
     language: v.string(),
-    userId: v.optional(v.string()),
-    isPremium: v.optional(v.boolean()),
+    sessionToken: v.optional(v.string()), // SECURITY: Required for authenticated users
+    // REMOVED: userId and isPremium - these are now derived from sessionToken server-side
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId + isPremium from server
+    let userId: string | undefined;
+    let isPremium = false;
+
+    if (args.sessionToken) {
+      const session: { valid: boolean; userId?: string; isPremium?: boolean } = await ctx.runQuery(api.auth.validateSessionByToken, {
+        sessionToken: args.sessionToken,
+      });
+      if (session.valid && session.userId) {
+        userId = session.userId;
+        isPremium = session.isPremium === true;
+      }
+    }
+
     // Step 0: Increment search count for ALL searches (not just AI)
     // This happens BEFORE the search to count attempts, not just successful searches
-    if (args.userId) {
+    if (userId) {
       // Check rate limit FIRST
       const currentRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
-        userId: args.userId,
+        userId: userId,
       });
 
       // If limit exceeded, return early with message
@@ -821,7 +836,7 @@ export const performSmartSearch = action({
 
       // Increment search count
       await ctx.runMutation(api.search.incrementSearchCount, {
-        userId: args.userId,
+        userId: userId,
       });
     }
 
@@ -829,15 +844,15 @@ export const performSmartSearch = action({
     const searchResult = await ctx.runQuery(api.search.smartSearch, {
       query: args.query,
       language: args.language,
-      userId: args.userId,
-      isPremium: args.isPremium,
+      userId: userId,
+      isPremium: isPremium,
     });
 
     // Get updated rate limit after incrementing
     let updatedRateLimit = searchResult.rateLimit;
-    if (args.userId) {
+    if (userId) {
       updatedRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
-        userId: args.userId,
+        userId: userId,
       });
     }
 
@@ -853,7 +868,7 @@ export const performSmartSearch = action({
     }
 
     // Step 3: Check if user can use AI
-    if (!args.userId || !updatedRateLimit?.canUseAI) {
+    if (!userId || !updatedRateLimit?.canUseAI) {
       // Return whatever we have from DB
       return {
         quotes: searchResult.quotes,
@@ -870,13 +885,13 @@ export const performSmartSearch = action({
         query: args.query,
         language: args.language,
         count: 5,
-        userId: args.userId,
+        userId: userId,
         categoryId: searchResult.category?._id,
       });
 
       // Get updated rate limit after AI generation
       const rateLimitAfterAI: RateLimitResult = await ctx.runQuery(api.search.checkRateLimit, {
-        userId: args.userId,
+        userId: userId,
       });
 
       return {

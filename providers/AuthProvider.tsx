@@ -31,7 +31,7 @@ interface AuthState {
 
 interface AuthActions {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
+  register: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string; userId?: string; sessionToken?: string }>;
   logout: () => Promise<void>;
   refreshAuth: () => Promise<void>;
 }
@@ -203,7 +203,7 @@ export const [AuthContext, useAuth] = createContextHook(() => {
     }
   };
 
-  const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; userId?: string }> => {
+  const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string; userId?: string; sessionToken?: string }> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
 
     // Validate email format
@@ -266,7 +266,8 @@ export const [AuthContext, useAuth] = createContextHook(() => {
         };
 
         await saveAuthData(user, tokens);
-        return { success: true, userId: userId };
+        // SECURITY: Return sessionToken for use in security question setup
+        return { success: true, userId: userId, sessionToken: result.sessionToken };
       }
 
       // No user returned but success was true - should not happen

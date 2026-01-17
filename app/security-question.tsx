@@ -22,7 +22,7 @@ export default function SecurityQuestionScreen() {
   const [securityAnswer, setSecurityAnswer] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, tokens } = useAuth();
   const setSecurityQuestionMutation = useMutation(api.auth.setSecurityQuestion);
   const { showAlert, AlertComponent } = useCustomAlert();
   const { t } = useLanguage();
@@ -79,10 +79,16 @@ export default function SecurityQuestionScreen() {
       return;
     }
 
+    // SECURITY: Validate session token before saving
+    if (!tokens?.sessionToken) {
+      showAlert(t('error'), t('sessionExpired') || 'Session expired', [{ text: t('ok'), onPress: () => router.push('/auth/login') }], '🔐');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await setSecurityQuestionMutation({
-        userId: user.id,
+        sessionToken: tokens.sessionToken, // SECURITY: Use session token instead of userId
         question: selectedQuestion,
         answer: securityAnswer.trim(),
       });

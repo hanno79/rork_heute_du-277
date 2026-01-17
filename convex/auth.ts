@@ -544,9 +544,10 @@ export const getUserSettings = query({
 });
 
 // Update user settings
+// SECURITY: Uses sessionToken for authorization - userId is derived from validated session
 export const updateUserSettings = mutation({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
     settings: v.object({
       language: v.optional(v.string()),
       notificationsEnabled: v.optional(v.boolean()),
@@ -558,9 +559,15 @@ export const updateUserSettings = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId from server
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      throw new Error("Unauthorized: " + (session.error || "Invalid session"));
+    }
+
     const existingSettings = await ctx.db
       .query("userSettings")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", session.userId as string))
       .first();
 
     if (!existingSettings) {
@@ -574,9 +581,10 @@ export const updateUserSettings = mutation({
 
 
 // Update user premium status
+// SECURITY: Uses sessionToken for authorization - userId is derived from validated session
 export const updatePremiumStatus = mutation({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
     isPremium: v.boolean(),
     stripeCustomerId: v.optional(v.string()),
     stripeSubscriptionId: v.optional(v.string()),
@@ -585,10 +593,16 @@ export const updatePremiumStatus = mutation({
     subscriptionPlan: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Find user by userId
+    // SECURITY: Validate session and get userId from server - NEVER trust client-provided userId
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      throw new Error("Unauthorized: " + (session.error || "Invalid session"));
+    }
+
+    // Find user by validated userId from session
     const user = await ctx.db
       .query("userProfiles")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .filter((q) => q.eq(q.field("userId"), session.userId))
       .first();
 
     if (!user) {
@@ -696,14 +710,21 @@ export const reactivateSubscription = mutation({
 });
 
 // Check and update expired premium subscriptions
+// SECURITY: Uses sessionToken for authorization - userId is derived from validated session
 export const checkAndExpirePremium = mutation({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId from server
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      return { updated: false, reason: "Unauthorized" };
+    }
+
     const user = await ctx.db
       .query("userProfiles")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .filter((q) => q.eq(q.field("userId"), session.userId))
       .first();
 
     if (!user) {
@@ -734,16 +755,23 @@ export const checkAndExpirePremium = mutation({
 // ============================================
 
 // Set security question for a user
+// SECURITY: Uses sessionToken for authorization - userId is derived from validated session
 export const setSecurityQuestion = mutation({
   args: {
-    userId: v.string(),
+    sessionToken: v.string(), // SECURITY: Required - userId derived from token
     question: v.string(),
     answer: v.string(),
   },
   handler: async (ctx, args) => {
+    // SECURITY: Validate session and get userId from server - NEVER trust client-provided userId
+    const session = await validateSessionInternal(ctx, args.sessionToken);
+    if (!session.valid || !session.userId) {
+      throw new Error("Unauthorized: " + (session.error || "Invalid session"));
+    }
+
     const user = await ctx.db
       .query("userProfiles")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .filter((q) => q.eq(q.field("userId"), session.userId))
       .first();
 
     if (!user) {
@@ -862,6 +890,43 @@ export const resetPasswordWithSecurityAnswer = mutation({
 // ============================================
 // SESSION VALIDATION
 // ============================================
+
+// SECURITY: Internal session validation helper for mutations
+// Returns userId from validated session - NEVER trust client-provided userId
+async function validateSessionInternal(
+  ctx: QueryCtx | MutationCtx,
+  sessionToken: string
+): Promise<{ valid: boolean; userId?: string; isPremium?: boolean; error?: string }> {
+  if (!sessionToken) {
+    return { valid: false, error: "Missing session token" };
+  }
+
+  // Look up user by session token index
+  const user = await ctx.db
+    .query("userProfiles")
+    .withIndex("by_sessionToken", (q) => q.eq("sessionToken", sessionToken))
+    .first();
+
+  if (!user) {
+    return { valid: false, error: "Invalid session token" };
+  }
+
+  // Timing-safe token verification
+  if (!timingSafeEqual(user.sessionToken ?? '', sessionToken)) {
+    return { valid: false, error: "Invalid session token" };
+  }
+
+  // Check if session has expired
+  if (user.sessionExpiresAt && user.sessionExpiresAt < Date.now()) {
+    return { valid: false, error: "Session expired" };
+  }
+
+  return {
+    valid: true,
+    userId: user.userId,
+    isPremium: user.isPremium,
+  };
+}
 
 // SECURITY: Validate session token for API authorization
 // Used by other modules (quotes, favorites) to verify user identity

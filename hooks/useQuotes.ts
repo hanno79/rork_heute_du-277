@@ -37,7 +37,7 @@ export default function useQuotes() {
   const [searchSource, setSearchSource] = useState<string>('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const { currentLanguage } = useLanguage();
-  const { user } = useAuth();
+  const { user, tokens } = useAuth();
 
   // Convex queries and mutations
   const dailyQuoteData = useQuery(
@@ -298,11 +298,11 @@ export default function useQuotes() {
       setIsGeneratingAI(true); // Show loading state
 
       try {
+        // SECURITY: Pass sessionToken instead of userId/isPremium - server validates and derives these
         const result = await performSmartSearchAction({
           query,
           language: currentLanguage,
-          userId: user?.id,
-          isPremium: isPremium,
+          sessionToken: tokens?.sessionToken,
         });
 
         // Process the quotes
@@ -363,7 +363,7 @@ export default function useQuotes() {
       setIsSearching(false);
       setIsGeneratingAI(false);
     }
-  }, [currentLanguage, user?.id, isPremium, applyLocalization, performSmartSearchAction]);
+  }, [currentLanguage, tokens?.sessionToken, applyLocalization, performSmartSearchAction]);
 
   // Local search function (simplified version)
   const searchLocalQuotes = (query: string): Quote[] => {

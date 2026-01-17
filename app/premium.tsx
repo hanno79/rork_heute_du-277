@@ -159,11 +159,19 @@ export default function PremiumScreen() {
     }
 
     if (result.success) {
+      // SECURITY: Get current session token for authorization
+      const currentToken = tokensRef.current?.sessionToken;
+      if (!currentToken) {
+        showAlert(t('error'), t('sessionExpired'), [{ text: t('ok'), onPress: () => {} }], '❌');
+        setIsLoading(false);
+        return;
+      }
+
       // Update premium status in Convex database with retry logic
       const expiresAt = Date.now() + (plan?.interval === 'year' ? 365 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000);
 
       const updateData = {
-        userId: user.id,
+        sessionToken: currentToken, // SECURITY: Use session token instead of userId
         isPremium: true,
         stripeCustomerId: result.customerId,
         stripeSubscriptionId: result.subscriptionId,
@@ -478,19 +486,24 @@ export default function PremiumScreen() {
             </View>
           )}
 
-          {/* Development Mode Banner */}
-          {!stripeAvailable && (
+          {/* Development Mode Banner - Only show in dev builds */}
+          {__DEV__ && !stripeAvailable && (
             <View style={styles.developmentBanner}>
               <Text style={styles.developmentText}>
                 🧪 {t('devModeTitle')}
               </Text>
-              {!actualIsPremium && user?.id && (
+              {!actualIsPremium && user?.id && tokens?.sessionToken && (
                 <TouchableOpacity
                   style={styles.devPremiumButton}
                   onPress={async () => {
+                    const currentToken = tokensRef.current?.sessionToken;
+                    if (!currentToken) {
+                      showAlert(t('error'), t('sessionExpired'), [{ text: t('ok'), onPress: () => {} }], '❌');
+                      return;
+                    }
                     try {
                       await updatePremiumStatus({
-                        userId: user.id,
+                        sessionToken: currentToken, // SECURITY: Use session token
                         isPremium: true,
                         premiumExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
                         stripeSubscriptionStatus: 'active',
