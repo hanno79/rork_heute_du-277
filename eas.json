@@ -1,12 +1,15 @@
 {
   "cli": {
     "version": ">= 16.0.0",
-    "appVersionSource": "remote",
-    "packageManager": "npm"
+    "appVersionSource": "remote"
   },
   "build": {
     "base": {
-      "node": "22.12.0"
+      "node": "22.12.0",
+      "env": {
+        "EAS_BUILD_RUNNER": "eas-build",
+        "EXPO_NO_BUNX": "true"
+      }
     },
     "development": {
       "extends": "base",
