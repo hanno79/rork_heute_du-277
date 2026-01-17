@@ -45,7 +45,7 @@ export default function ProfileScreen() {
   const getSubscriptionStatusText = () => {
     if (!isPremium) return t('freeVersion');
     if (subscriptionCanceled) {
-      return `Premium bis ${formatExpiryDate(premiumExpiresAt)}`;
+      return t('profilePremiumUntil').replace('{date}', formatExpiryDate(premiumExpiresAt));
     }
     return t('premiumActive');
   };
@@ -54,20 +54,20 @@ export default function ProfileScreen() {
   const getSubscriptionDescription = () => {
     if (!isPremium) return t('freeVersionDescription');
     if (subscriptionCanceled) {
-      return `Dein Abo wurde gekündigt. Du behältst Zugang bis zum ${formatExpiryDate(premiumExpiresAt)}.`;
+      return t('profileSubscriptionCanceled').replace('{date}', formatExpiryDate(premiumExpiresAt));
     }
-    const planText = subscriptionPlan === 'yearly' ? 'Jährlich' : 'Monatlich';
-    return `${planText} - Nächste Zahlung: ${formatExpiryDate(premiumExpiresAt)}`;
+    const planText = subscriptionPlan === 'yearly' ? t('profileYearly') : t('profileMonthly');
+    return `${planText} - ${t('profileNextPayment')}: ${formatExpiryDate(premiumExpiresAt)}`;
   };
 
   const handlePremiumPress = () => {
     if (!isAuthenticated) {
       showAlert(
-        'Anmeldung erforderlich',
-        'Sie müssen sich anmelden, um Premium-Features zu nutzen.',
+        t('profileLoginRequired'),
+        t('profileLoginRequiredMessage'),
         [
-          { text: 'Abbrechen', style: 'cancel', onPress: () => {} },
-          { text: 'Anmelden', onPress: () => router.push('/auth/login') },
+          { text: t('cancel'), style: 'cancel', onPress: () => {} },
+          { text: t('profileSignIn'), onPress: () => router.push('/auth/login') },
         ],
         '🔐'
       );
@@ -79,12 +79,12 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     showAlert(
-      'Abmelden',
-      'Möchten Sie sich wirklich abmelden?',
+      t('profileSignOut'),
+      t('profileSignOutConfirm'),
       [
-        { text: 'Abbrechen', style: 'cancel', onPress: () => {} },
+        { text: t('cancel'), style: 'cancel', onPress: () => {} },
         {
-          text: 'Abmelden',
+          text: t('profileSignOut'),
           style: 'destructive',
           onPress: async () => {
             await logout();
@@ -129,23 +129,23 @@ export default function ProfileScreen() {
           <View style={styles.subscriptionCard}>
             <View style={styles.subscriptionHeader}>
               <User size={24} color={colors.primary} />
-              <Text style={styles.subscriptionTitle}>Anmeldung</Text>
+              <Text style={styles.subscriptionTitle}>{t('profileLogin')}</Text>
             </View>
-            
+
             <Text style={styles.subscriptionStatus}>
-              Nicht angemeldet
+              {t('profileNotLoggedIn')}
             </Text>
-            
+
             <Text style={styles.subscriptionDescription}>
-              Melden Sie sich an, um Ihre Favoriten zu synchronisieren und Premium-Features zu nutzen.
+              {t('profileSignInPrompt')}
             </Text>
-            
-            <TouchableOpacity 
-              style={styles.subscriptionButton} 
+
+            <TouchableOpacity
+              style={styles.subscriptionButton}
               onPress={handleLogin}
             >
               <Text style={styles.buttonText}>
-                Anmelden
+                {t('profileSignIn')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -181,7 +181,7 @@ export default function ProfileScreen() {
                 isPremium && !subscriptionCanceled && styles.manageButtonText
               ]}>
                 {subscriptionCanceled
-                  ? 'Erneut abonnieren'
+                  ? t('profileResubscribe')
                   : isPremium
                     ? t('managePremium')
                     : t('upgradeToPremium')}
@@ -210,7 +210,7 @@ export default function ProfileScreen() {
                 )}
                 {(!capabilities.canSchedule || capabilities.isExpoGo) && (
                   <Text style={[styles.settingSubtext, { color: '#FF6B6B' }]}>
-                    Nur in Development Build verfügbar
+                    {t('profileDevBuildOnly')}
                   </Text>
                 )}
               </View>
@@ -266,7 +266,7 @@ export default function ProfileScreen() {
             >
               <View style={styles.settingLeft}>
                 <Shield size={20} color={colors.text} style={styles.settingIcon} />
-                <Text style={styles.settingLabel}>Sicherheitsfrage</Text>
+                <Text style={styles.settingLabel}>{t('securityQuestionTitle')}</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -289,7 +289,7 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.settingItem} onPress={handleLogout}>
               <View style={styles.settingLeft}>
                 <LogOut size={20} color={colors.error} style={styles.settingIcon} />
-                <Text style={[styles.settingLabel, { color: colors.premium }]}>Abmelden</Text>
+                <Text style={[styles.settingLabel, { color: colors.premium }]}>{t('profileSignOut')}</Text>
               </View>
             </TouchableOpacity>
           )}

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import useLanguage from '@/hooks/useLanguage';
 import colors from '@/constants/colors';
 import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
 
@@ -21,11 +22,12 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { login } = useAuth();
+  const { t } = useLanguage();
   const { alertState, showAlert, AlertComponent } = useCustomAlert();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      showAlert('Fehler', 'Bitte füllen Sie alle Felder aus.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authFillAllFields'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -36,10 +38,10 @@ export default function LoginScreen() {
       if (result.success) {
         router.replace('/(tabs)');
       } else {
-        showAlert('Anmeldung fehlgeschlagen', result.error || 'Unbekannter Fehler', [{ text: 'OK', onPress: () => {} }], '❌');
+        showAlert(t('authLoginFailed'), result.error || t('authUnknownError'), [{ text: t('ok'), onPress: () => {} }], '❌');
       }
     } catch (err) {
-      showAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.', [{ text: 'OK', onPress: () => {} }], '❌');
+      showAlert(t('error'), t('authUnexpectedError'), [{ text: t('ok'), onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);
     }
@@ -54,23 +56,23 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Willkommen zurück</Text>
-          <Text style={styles.subtitle}>Melden Sie sich in Ihrem Konto an</Text>
+          <Text style={styles.title}>{t('authWelcomeBack')}</Text>
+          <Text style={styles.subtitle}>{t('authSignInToAccount')}</Text>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>E-Mail</Text>
+              <Text style={styles.label}>{t('authEmail')}</Text>
               <TextInput
                 style={styles.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Ihre E-Mail-Adresse"
+                placeholder={t('authEmailPlaceholder')}
                 placeholderTextColor={colors.lightText}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -81,13 +83,13 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Passwort</Text>
+              <Text style={styles.label}>{t('authPassword')}</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Ihr Passwort"
+                  placeholder={t('authPasswordPlaceholder')}
                   placeholderTextColor={colors.lightText}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -112,7 +114,7 @@ export default function LoginScreen() {
                 onPress={navigateToForgotPassword}
                 disabled={isLoading}
               >
-                <Text style={styles.forgotPasswordText}>Passwort vergessen?</Text>
+                <Text style={styles.forgotPasswordText}>{t('authForgotPassword')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -123,14 +125,14 @@ export default function LoginScreen() {
               testID="login-button"
             >
               <Text style={styles.loginButtonText}>
-                {isLoading ? 'Anmelden...' : 'Anmelden'}
+                {isLoading ? t('authSigningIn') : t('authSignIn')}
               </Text>
             </TouchableOpacity>
 
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>Noch kein Konto?</Text>
+              <Text style={styles.registerText}>{t('authNoAccount')}</Text>
               <TouchableOpacity onPress={navigateToRegister} disabled={isLoading}>
-                <Text style={styles.registerLink}>Registrieren</Text>
+                <Text style={styles.registerLink}>{t('authRegister')}</Text>
               </TouchableOpacity>
             </View>
           </View>

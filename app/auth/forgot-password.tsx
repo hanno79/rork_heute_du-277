@@ -16,6 +16,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import colors from '@/constants/colors';
 import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
+import useLanguage from '@/hooks/useLanguage';
 
 type Step = 'email' | 'security' | 'password' | 'success';
 
@@ -31,6 +32,7 @@ export default function ForgotPasswordScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const { showAlert, AlertComponent } = useCustomAlert();
+  const { t } = useLanguage();
   const resetPasswordMutation = useMutation(api.auth.resetPasswordWithSecurityAnswer);
 
   // Query for security question - only runs when email is set and we need it
@@ -41,14 +43,14 @@ export default function ForgotPasswordScreen() {
 
   const handleEmailSubmit = async () => {
     if (!email.trim()) {
-      showAlert('Fehler', 'Bitte geben Sie Ihre E-Mail-Adresse ein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authEnterEmailForReset'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      showAlert('Fehler', 'Bitte geben Sie eine gültige E-Mail-Adresse ein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authEnterValidEmail'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -64,9 +66,9 @@ export default function ForgotPasswordScreen() {
 
       if (!securityQuestionResult.found || !securityQuestionResult.question) {
         showAlert(
-          'Keine Sicherheitsfrage',
-          'Für dieses Konto wurde keine Sicherheitsfrage eingerichtet. Bitte kontaktieren Sie den Support.',
-          [{ text: 'OK', onPress: () => {} }],
+          t('authNoSecurityQuestion'),
+          t('authNoSecurityQuestionSet'),
+          [{ text: t('ok'), onPress: () => {} }],
           '❌'
         );
         setIsLoading(false);
@@ -81,7 +83,7 @@ export default function ForgotPasswordScreen() {
 
   const handleSecuritySubmit = () => {
     if (!securityAnswer.trim()) {
-      showAlert('Fehler', 'Bitte beantworten Sie die Sicherheitsfrage.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authAnswerQuestion'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -90,30 +92,30 @@ export default function ForgotPasswordScreen() {
 
   const handlePasswordSubmit = async () => {
     if (!newPassword.trim() || !confirmPassword.trim()) {
-      showAlert('Fehler', 'Bitte füllen Sie beide Passwort-Felder aus.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authFillBothPasswordFields'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      showAlert('Fehler', 'Die Passwörter stimmen nicht überein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordsDontMatch'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
     // Password validation
     if (newPassword.length < 8) {
-      showAlert('Fehler', 'Das Passwort muss mindestens 8 Zeichen lang sein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordMinLength'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[A-Z]/.test(newPassword)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens einen Großbuchstaben enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordUppercase'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[a-z]/.test(newPassword)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens einen Kleinbuchstaben enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordLowercase'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[0-9]/.test(newPassword)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens eine Zahl enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordNumber'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -127,8 +129,8 @@ export default function ForgotPasswordScreen() {
 
       setStep('success');
     } catch (error: any) {
-      const errorMessage = error.message || 'Passwort konnte nicht zurückgesetzt werden.';
-      showAlert('Fehler', errorMessage, [{ text: 'OK', onPress: () => {} }], '❌');
+      const errorMessage = error.message || t('authPasswordResetFailed');
+      showAlert(t('error'), errorMessage, [{ text: t('ok'), onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);
     }
@@ -153,19 +155,19 @@ export default function ForgotPasswordScreen() {
 
   const renderEmailStep = () => (
     <>
-      <Text style={styles.title}>Passwort vergessen?</Text>
+      <Text style={styles.title}>{t('authForgotPassword').replace('?', '')}</Text>
       <Text style={styles.subtitle}>
-        Geben Sie Ihre E-Mail-Adresse ein, um Ihr Passwort zurückzusetzen.
+        {t('authEnterEmailForReset')}
       </Text>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>E-Mail</Text>
+          <Text style={styles.label}>{t('authEmail')}</Text>
           <TextInput
             style={styles.input}
             value={email}
             onChangeText={setEmail}
-            placeholder="Ihre E-Mail-Adresse"
+            placeholder={t('authEmailPlaceholder')}
             placeholderTextColor={colors.lightText}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -182,7 +184,7 @@ export default function ForgotPasswordScreen() {
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Weiter</Text>
+            <Text style={styles.buttonText}>{t('authContinue')}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -191,26 +193,26 @@ export default function ForgotPasswordScreen() {
 
   const renderSecurityStep = () => (
     <>
-      <Text style={styles.title}>Sicherheitsfrage</Text>
+      <Text style={styles.title}>{t('authSecurityQuestion')}</Text>
       <Text style={styles.subtitle}>
-        Beantworten Sie Ihre Sicherheitsfrage, um fortzufahren.
+        {t('authAnswerSecurityQuestion')}
       </Text>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Ihre Sicherheitsfrage</Text>
+          <Text style={styles.label}>{t('authYourSecurityQuestion')}</Text>
           <View style={styles.questionContainer}>
             <Text style={styles.questionText}>{securityQuestion}</Text>
           </View>
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Ihre Antwort</Text>
+          <Text style={styles.label}>{t('authYourAnswer')}</Text>
           <TextInput
             style={styles.input}
             value={securityAnswer}
             onChangeText={setSecurityAnswer}
-            placeholder="Geben Sie Ihre Antwort ein"
+            placeholder={t('authEnterYourAnswer')}
             placeholderTextColor={colors.lightText}
             autoCapitalize="none"
             autoCorrect={false}
@@ -223,7 +225,7 @@ export default function ForgotPasswordScreen() {
           onPress={handleSecuritySubmit}
           disabled={isLoading}
         >
-          <Text style={styles.buttonText}>Weiter</Text>
+          <Text style={styles.buttonText}>{t('authContinue')}</Text>
         </TouchableOpacity>
       </View>
     </>
@@ -231,20 +233,20 @@ export default function ForgotPasswordScreen() {
 
   const renderPasswordStep = () => (
     <>
-      <Text style={styles.title}>Neues Passwort</Text>
+      <Text style={styles.title}>{t('authNewPassword')}</Text>
       <Text style={styles.subtitle}>
-        Geben Sie Ihr neues Passwort ein.
+        {t('authEnterNewPassword')}
       </Text>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Neues Passwort</Text>
+          <Text style={styles.label}>{t('authNewPassword')}</Text>
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
               value={newPassword}
               onChangeText={setNewPassword}
-              placeholder="Min. 8 Zeichen, Groß-/Kleinbuchstaben, Zahl"
+              placeholder={t('authPasswordRequirements')}
               placeholderTextColor={colors.lightText}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
@@ -265,13 +267,13 @@ export default function ForgotPasswordScreen() {
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>Passwort bestätigen</Text>
+          <Text style={styles.label}>{t('authConfirmPassword')}</Text>
           <View style={styles.passwordContainer}>
             <TextInput
               style={styles.passwordInput}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              placeholder="Passwort wiederholen"
+              placeholder={t('authConfirmPasswordPlaceholder')}
               placeholderTextColor={colors.lightText}
               secureTextEntry={!showConfirmPassword}
               autoCapitalize="none"
@@ -299,7 +301,7 @@ export default function ForgotPasswordScreen() {
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.buttonText}>Passwort zurücksetzen</Text>
+            <Text style={styles.buttonText}>{t('authResetPasswordButton')}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -311,16 +313,16 @@ export default function ForgotPasswordScreen() {
       <View style={styles.successIcon}>
         <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
       </View>
-      <Text style={styles.title}>Passwort geändert!</Text>
+      <Text style={styles.title}>{t('authPasswordResetSuccess')}</Text>
       <Text style={styles.subtitle}>
-        Ihr Passwort wurde erfolgreich zurückgesetzt. Sie können sich jetzt mit Ihrem neuen Passwort anmelden.
+        {t('authPasswordResetSuccessMessage')}
       </Text>
 
       <TouchableOpacity
         style={styles.button}
         onPress={navigateToLogin}
       >
-        <Text style={styles.buttonText}>Zur Anmeldung</Text>
+        <Text style={styles.buttonText}>{t('authGoToLogin')}</Text>
       </TouchableOpacity>
     </>
   );
@@ -345,9 +347,9 @@ export default function ForgotPasswordScreen() {
 
           {step === 'email' && (
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Erinnern Sie sich an Ihr Passwort?</Text>
+              <Text style={styles.loginText}>{t('authRememberPassword')}</Text>
               <TouchableOpacity onPress={navigateToLogin}>
-                <Text style={styles.loginLink}>Anmelden</Text>
+                <Text style={styles.loginLink}>{t('authSignIn')}</Text>
               </TouchableOpacity>
             </View>
           )}

@@ -1,6 +1,32 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// SECURITY: Timing-safe string comparison to prevent timing attacks
+// Returns false if lengths differ, otherwise XORs char codes and returns result
+// Accepts null/undefined inputs which are normalized to empty strings
+function timingSafeEqual(a: string | null | undefined, b: string | null | undefined): boolean {
+  // Normalize null/undefined to empty string
+  const strA = a ?? '';
+  const strB = b ?? '';
+
+  // If lengths differ, still do the comparison to maintain constant time
+  // but remember that the result should be false
+  const lenA = strA.length;
+  const lenB = strB.length;
+  const maxLen = Math.max(lenA, lenB);
+
+  let result = lenA ^ lenB; // Will be non-zero if lengths differ
+
+  for (let i = 0; i < maxLen; i++) {
+    // Use 0 as fallback for out-of-bounds access to maintain constant time
+    const charA = i < lenA ? strA.charCodeAt(i) : 0;
+    const charB = i < lenB ? strB.charCodeAt(i) : 0;
+    result |= charA ^ charB;
+  }
+
+  return result === 0;
+}
+
 // Days to avoid repeating a quote as "Quote of the Day"
 const DAILY_QUOTE_REPEAT_DAYS = 30;
 
@@ -218,7 +244,8 @@ async function validateSessionToken(
     return { valid: false, error: "User not found" };
   }
 
-  if (user.sessionToken !== sessionToken) {
+  // SECURITY: Use timing-safe comparison to prevent timing attacks
+  if (!timingSafeEqual(user.sessionToken, sessionToken)) {
     return { valid: false, error: "Invalid session token" };
   }
 

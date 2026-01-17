@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,14 +17,7 @@ import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import colors from '@/constants/colors';
 import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
-
-const SECURITY_QUESTIONS = [
-  'Name Ihres ersten Haustieres?',
-  'Geburtsstadt Ihrer Mutter?',
-  'Name Ihrer ersten Schule?',
-  'Lieblingsfilm aus Ihrer Kindheit?',
-  'Name Ihres besten Freundes aus der Kindheit?',
-];
+import useLanguage from '@/hooks/useLanguage';
 
 export default function RegisterScreen() {
   const [name, setName] = useState<string>('');
@@ -37,40 +30,52 @@ export default function RegisterScreen() {
 
   // Security question state
   const [showSecurityModal, setShowSecurityModal] = useState<boolean>(false);
-  const [selectedQuestion, setSelectedQuestion] = useState<string>(SECURITY_QUESTIONS[0]);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [securityAnswer, setSecurityAnswer] = useState<string>('');
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
 
   const { register } = useAuth();
   const setSecurityQuestionMutation = useMutation(api.auth.setSecurityQuestion);
   const { alertState, showAlert, AlertComponent } = useCustomAlert();
+  const { t } = useLanguage();
+
+  // Translated security questions - memoized to avoid re-creating on every render
+  const securityQuestions = useMemo(() => [
+    t('securityQuestionPet'),
+    t('securityQuestionMotherCity'),
+    t('securityQuestionSchool'),
+    t('securityQuestionMovie'),
+    t('securityQuestionFriend'),
+  ], [t]);
+
+  const selectedQuestion = securityQuestions[selectedQuestionIndex];
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
-      showAlert('Fehler', 'Bitte füllen Sie alle Felder aus.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authFillAllFields'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
     if (password !== confirmPassword) {
-      showAlert('Fehler', 'Die Passwörter stimmen nicht überein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordsDontMatch'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
     // Enhanced password validation (min 8 chars, uppercase, lowercase, number)
     if (password.length < 8) {
-      showAlert('Fehler', 'Das Passwort muss mindestens 8 Zeichen lang sein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordMinLength'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[A-Z]/.test(password)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens einen Großbuchstaben enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordUppercase'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[a-z]/.test(password)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens einen Kleinbuchstaben enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordLowercase'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
     if (!/[0-9]/.test(password)) {
-      showAlert('Fehler', 'Das Passwort muss mindestens eine Zahl enthalten.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authPasswordNumber'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -86,29 +91,29 @@ export default function RegisterScreen() {
         } else {
           // Fallback if no userId returned - go directly to app
           showAlert(
-            'Registrierung erfolgreich!',
-            'Willkommen bei Heute Du. Sie sind jetzt angemeldet.',
-            [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
+            t('authRegistrationSuccess'),
+            t('authWelcomeToApp'),
+            [{ text: t('ok'), onPress: () => router.replace('/(tabs)') }],
             '🎉'
           );
         }
       } else {
-        const errorMessage = result.error || 'Unbekannter Fehler';
+        const errorMessage = result.error || t('authUnknownError');
 
         // Provide more user-friendly error messages
         let displayMessage = errorMessage;
         if (errorMessage.includes('email confirmation')) {
-          displayMessage = 'Die Registrierung war erfolgreich! Sie können sich jetzt mit Ihren Daten anmelden.';
-          showAlert('Registrierung abgeschlossen', displayMessage, [
-            { text: 'Zur Anmeldung', onPress: () => router.push('/auth/login') }
+          displayMessage = t('authRegistrationCompleteLogin');
+          showAlert(t('authRegistrationComplete'), displayMessage, [
+            { text: t('authGoToLogin'), onPress: () => router.push('/auth/login') }
           ], '✅');
           return;
         }
 
-        showAlert('Registrierung fehlgeschlagen', displayMessage, [{ text: 'OK', onPress: () => {} }], '❌');
+        showAlert(t('authRegistrationFailed'), displayMessage, [{ text: t('ok'), onPress: () => {} }], '❌');
       }
     } catch (err) {
-      showAlert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.', [{ text: 'OK', onPress: () => {} }], '❌');
+      showAlert(t('error'), t('authUnexpectedError'), [{ text: t('ok'), onPress: () => {} }], '❌');
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +125,7 @@ export default function RegisterScreen() {
 
   const handleSaveSecurityQuestion = async () => {
     if (!securityAnswer.trim()) {
-      showAlert('Fehler', 'Bitte geben Sie eine Antwort ein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('authEnterAnswer'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -140,18 +145,18 @@ export default function RegisterScreen() {
 
       setShowSecurityModal(false);
       showAlert(
-        'Registrierung abgeschlossen!',
-        'Ihre Sicherheitsfrage wurde gespeichert. Willkommen bei Heute Du!',
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
+        t('authRegistrationComplete'),
+        t('authSecurityQuestionSaved'),
+        [{ text: t('ok'), onPress: () => router.replace('/(tabs)') }],
         '🎉'
       );
     } catch (error) {
       // Save failed, but registration succeeded - let user continue
       setShowSecurityModal(false);
       showAlert(
-        'Registrierung erfolgreich!',
-        'Willkommen bei Heute Du. (Sicherheitsfrage konnte nicht gespeichert werden)',
-        [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
+        t('authRegistrationSuccess'),
+        t('authSecurityQuestionFailed'),
+        [{ text: t('ok'), onPress: () => router.replace('/(tabs)') }],
         '🎉'
       );
     } finally {
@@ -162,9 +167,9 @@ export default function RegisterScreen() {
   const handleSkipSecurityQuestion = () => {
     setShowSecurityModal(false);
     showAlert(
-      'Registrierung erfolgreich!',
-      'Willkommen bei Heute Du. Sie können die Sicherheitsfrage später in den Einstellungen hinzufügen.',
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)') }],
+      t('authRegistrationSuccess'),
+      t('authSecurityQuestionSkipped'),
+      [{ text: t('ok'), onPress: () => router.replace('/(tabs)') }],
       '🎉'
     );
   };
@@ -176,17 +181,17 @@ export default function RegisterScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Konto erstellen</Text>
-          <Text style={styles.subtitle}>Registrieren Sie sich für Heute Du.</Text>
+          <Text style={styles.title}>{t('authCreateAccount')}</Text>
+          <Text style={styles.subtitle}>{t('authCreateYourAccount')}</Text>
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Name</Text>
+              <Text style={styles.label}>{t('authName')}</Text>
               <TextInput
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="Ihr vollständiger Name"
+                placeholder={t('authNamePlaceholder')}
                 placeholderTextColor={colors.lightText}
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -196,12 +201,12 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>E-Mail</Text>
+              <Text style={styles.label}>{t('authEmail')}</Text>
               <TextInput
                 style={styles.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Ihre E-Mail-Adresse"
+                placeholder={t('authEmailPlaceholder')}
                 placeholderTextColor={colors.lightText}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -212,13 +217,13 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Passwort</Text>
+              <Text style={styles.label}>{t('authPassword')}</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Min. 8 Zeichen, Groß-/Kleinbuchstaben, Zahl"
+                  placeholder={t('authPasswordRequirements')}
                   placeholderTextColor={colors.lightText}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -241,13 +246,13 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Passwort bestätigen</Text>
+              <Text style={styles.label}>{t('authConfirmPassword')}</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
-                  placeholder="Passwort wiederholen"
+                  placeholder={t('authConfirmPasswordPlaceholder')}
                   placeholderTextColor={colors.lightText}
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
@@ -276,14 +281,14 @@ export default function RegisterScreen() {
               testID="register-button"
             >
               <Text style={styles.registerButtonText}>
-                {isLoading ? 'Registrieren...' : 'Registrieren'}
+                {isLoading ? t('authRegistering') : t('authRegister')}
               </Text>
             </TouchableOpacity>
 
             <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Bereits ein Konto?</Text>
+              <Text style={styles.loginText}>{t('authAlreadyHaveAccount')}</Text>
               <TouchableOpacity onPress={navigateToLogin} disabled={isLoading}>
-                <Text style={styles.loginLink}>Anmelden</Text>
+                <Text style={styles.loginLink}>{t('authSignIn')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -301,41 +306,41 @@ export default function RegisterScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Sicherheitsfrage einrichten</Text>
+            <Text style={styles.modalTitle}>{t('authSetupSecurityQuestion')}</Text>
             <Text style={styles.modalSubtitle}>
-              Diese Frage hilft Ihnen, Ihr Passwort zurückzusetzen, falls Sie es vergessen.
+              {t('authSecurityQuestionHelp')}
             </Text>
 
-            <Text style={styles.label}>Wählen Sie eine Frage</Text>
+            <Text style={styles.label}>{t('authChooseQuestion')}</Text>
             <ScrollView style={styles.questionsList} nestedScrollEnabled>
-              {SECURITY_QUESTIONS.map((question, index) => (
+              {securityQuestions.map((question, index) => (
                 <TouchableOpacity
                   key={index}
                   style={[
                     styles.questionOption,
-                    selectedQuestion === question && styles.questionOptionSelected
+                    selectedQuestionIndex === index && styles.questionOptionSelected
                   ]}
-                  onPress={() => setSelectedQuestion(question)}
+                  onPress={() => setSelectedQuestionIndex(index)}
                 >
                   <Text style={[
                     styles.questionOptionText,
-                    selectedQuestion === question && styles.questionOptionTextSelected
+                    selectedQuestionIndex === index && styles.questionOptionTextSelected
                   ]}>
                     {question}
                   </Text>
-                  {selectedQuestion === question && (
+                  {selectedQuestionIndex === index && (
                     <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            <Text style={styles.label}>Ihre Antwort</Text>
+            <Text style={styles.label}>{t('authYourAnswer')}</Text>
             <TextInput
               style={styles.input}
               value={securityAnswer}
               onChangeText={setSecurityAnswer}
-              placeholder="Geben Sie Ihre Antwort ein"
+              placeholder={t('authEnterYourAnswer')}
               placeholderTextColor={colors.lightText}
               autoCapitalize="none"
               autoCorrect={false}
@@ -347,7 +352,7 @@ export default function RegisterScreen() {
               disabled={isLoading}
             >
               <Text style={styles.registerButtonText}>
-                {isLoading ? 'Speichern...' : 'Speichern'}
+                {isLoading ? t('authSaving') : t('authSave')}
               </Text>
             </TouchableOpacity>
 
@@ -356,7 +361,7 @@ export default function RegisterScreen() {
               onPress={handleSkipSecurityQuestion}
               disabled={isLoading}
             >
-              <Text style={styles.skipButtonText}>Später einrichten</Text>
+              <Text style={styles.skipButtonText}>{t('authSetupLater')}</Text>
             </TouchableOpacity>
           </View>
         </View>

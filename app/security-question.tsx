@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,23 +15,28 @@ import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import colors from '@/constants/colors';
 import CustomAlert, { useCustomAlert } from '@/components/CustomAlert';
-
-const SECURITY_QUESTIONS = [
-  'Name Ihres ersten Haustieres?',
-  'Geburtsstadt Ihrer Mutter?',
-  'Name Ihrer ersten Schule?',
-  'Lieblingsfilm aus Ihrer Kindheit?',
-  'Name Ihres besten Freundes aus der Kindheit?',
-];
+import useLanguage from '@/hooks/useLanguage';
 
 export default function SecurityQuestionScreen() {
-  const [selectedQuestion, setSelectedQuestion] = useState<string>(SECURITY_QUESTIONS[0]);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [securityAnswer, setSecurityAnswer] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const { user, isAuthenticated } = useAuth();
   const setSecurityQuestionMutation = useMutation(api.auth.setSecurityQuestion);
   const { showAlert, AlertComponent } = useCustomAlert();
+  const { t } = useLanguage();
+
+  // Translated security questions - memoized to avoid re-creating on every render
+  const securityQuestions = useMemo(() => [
+    t('securityQuestionPet'),
+    t('securityQuestionMotherCity'),
+    t('securityQuestionSchool'),
+    t('securityQuestionMovie'),
+    t('securityQuestionFriend'),
+  ], [t]);
+
+  const selectedQuestion = securityQuestions[selectedQuestionIndex];
 
   // Query current security question
   const currentQuestion = useQuery(
@@ -41,23 +46,27 @@ export default function SecurityQuestionScreen() {
 
   useEffect(() => {
     if (currentQuestion?.found && currentQuestion.question) {
-      setSelectedQuestion(currentQuestion.question);
+      // Find the index of the current question in the list
+      const index = securityQuestions.findIndex(q => q === currentQuestion.question);
+      if (index !== -1) {
+        setSelectedQuestionIndex(index);
+      }
     }
-  }, [currentQuestion]);
+  }, [currentQuestion, securityQuestions]);
 
   if (!isAuthenticated || !user) {
     return (
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.title}>Nicht angemeldet</Text>
+          <Text style={styles.title}>{t('profileNotLoggedIn')}</Text>
           <Text style={styles.subtitle}>
-            Bitte melden Sie sich an, um Ihre Sicherheitsfrage zu verwalten.
+            {t('securityQuestionLoginRequired')}
           </Text>
           <TouchableOpacity
             style={styles.button}
             onPress={() => router.push('/auth/login')}
           >
-            <Text style={styles.buttonText}>Zur Anmeldung</Text>
+            <Text style={styles.buttonText}>{t('authGoToLogin')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -66,7 +75,7 @@ export default function SecurityQuestionScreen() {
 
   const handleSave = async () => {
     if (!securityAnswer.trim()) {
-      showAlert('Fehler', 'Bitte geben Sie eine Antwort ein.', [{ text: 'OK', onPress: () => {} }], '⚠️');
+      showAlert(t('error'), t('securityQuestionEnterAnswer'), [{ text: t('ok'), onPress: () => {} }], '⚠️');
       return;
     }
 
@@ -79,17 +88,17 @@ export default function SecurityQuestionScreen() {
       });
 
       showAlert(
-        'Gespeichert',
-        'Ihre Sicherheitsfrage wurde erfolgreich aktualisiert.',
-        [{ text: 'OK', onPress: () => router.back() }],
+        t('securityQuestionSaveSuccess'),
+        t('securityQuestionSaveSuccessMessage'),
+        [{ text: t('ok'), onPress: () => router.back() }],
         '✅'
       );
       setSecurityAnswer('');
     } catch (error) {
       showAlert(
-        'Fehler',
-        'Die Sicherheitsfrage konnte nicht gespeichert werden.',
-        [{ text: 'OK', onPress: () => {} }],
+        t('error'),
+        t('securityQuestionSaveFailed'),
+        [{ text: t('ok'), onPress: () => {} }],
         '❌'
       );
     } finally {
@@ -101,50 +110,50 @@ export default function SecurityQuestionScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Sicherheitsfrage</Text>
+          <Text style={styles.title}>{t('securityQuestionTitle')}</Text>
           <Text style={styles.subtitle}>
-            Mit dieser Frage können Sie Ihr Passwort zurücksetzen, falls Sie es vergessen.
+            {t('securityQuestionDescription')}
           </Text>
 
           {currentQuestion?.found && (
             <View style={styles.currentQuestionBox}>
               <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
               <Text style={styles.currentQuestionText}>
-                Aktuelle Frage: {currentQuestion.question}
+                {t('securityQuestionCurrent')} {currentQuestion.question}
               </Text>
             </View>
           )}
 
-          <Text style={styles.label}>Wählen Sie eine Frage</Text>
+          <Text style={styles.label}>{t('securityQuestionSelectNew')}</Text>
           <View style={styles.questionsList}>
-            {SECURITY_QUESTIONS.map((question, index) => (
+            {securityQuestions.map((question, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
                   styles.questionOption,
-                  selectedQuestion === question && styles.questionOptionSelected
+                  selectedQuestionIndex === index && styles.questionOptionSelected
                 ]}
-                onPress={() => setSelectedQuestion(question)}
+                onPress={() => setSelectedQuestionIndex(index)}
               >
                 <Text style={[
                   styles.questionOptionText,
-                  selectedQuestion === question && styles.questionOptionTextSelected
+                  selectedQuestionIndex === index && styles.questionOptionTextSelected
                 ]}>
                   {question}
                 </Text>
-                {selectedQuestion === question && (
+                {selectedQuestionIndex === index && (
                   <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
                 )}
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text style={styles.label}>Ihre Antwort</Text>
+          <Text style={styles.label}>{t('securityQuestionAnswerLabel')}</Text>
           <TextInput
             style={styles.input}
             value={securityAnswer}
             onChangeText={setSecurityAnswer}
-            placeholder="Geben Sie Ihre Antwort ein"
+            placeholder={t('securityQuestionAnswerPlaceholder')}
             placeholderTextColor={colors.lightText}
             autoCapitalize="none"
             autoCorrect={false}
@@ -152,7 +161,7 @@ export default function SecurityQuestionScreen() {
           />
 
           <Text style={styles.hint}>
-            Hinweis: Die Antwort wird verschlüsselt gespeichert. Merken Sie sich die Antwort gut.
+            {t('securityQuestionHint')}
           </Text>
 
           <TouchableOpacity
@@ -164,7 +173,7 @@ export default function SecurityQuestionScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.buttonText}>
-                {currentQuestion?.found ? 'Aktualisieren' : 'Speichern'}
+                {currentQuestion?.found ? t('securityQuestionUpdate') : t('securityQuestionSave')}
               </Text>
             )}
           </TouchableOpacity>

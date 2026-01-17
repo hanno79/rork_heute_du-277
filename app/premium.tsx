@@ -522,7 +522,7 @@ export default function PremiumScreen() {
                     {t('monthlyPlan')}
                   </Text>
                   <Text style={[styles.planPrice, selectedPlan === 'monthly' && styles.planPriceSelected]}>
-                    {formatPrice(3.00)}/{t('month')}
+                    {formatPrice(3.00, 'EUR', currentLanguage === 'de' ? 'de-DE' : 'en-US')}/{t('month')}
                   </Text>
                 </TouchableOpacity>
 
@@ -534,7 +534,7 @@ export default function PremiumScreen() {
                     {t('yearlyPlan')}
                   </Text>
                   <Text style={[styles.planPrice, selectedPlan === 'yearly' && styles.planPriceSelected]}>
-                    {formatPrice(30.00)}/{t('year')}
+                    {formatPrice(30.00, 'EUR', currentLanguage === 'de' ? 'de-DE' : 'en-US')}/{t('year')}
                   </Text>
                   <Text style={styles.savingsText}>{t('save')} 17%</Text>
                 </TouchableOpacity>

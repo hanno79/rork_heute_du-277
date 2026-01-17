@@ -78,9 +78,13 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   },
 ];
 
-// Helper function to format price
-export const formatPrice = (price: number, currency: string = 'EUR'): string => {
-  return new Intl.NumberFormat('de-DE', {
+// Helper function to format price with locale support
+export const formatPrice = (
+  price: number,
+  currency: string = 'EUR',
+  locale: string = 'de-DE'
+): string => {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency,
   }).format(price);
