@@ -42,9 +42,14 @@
     "production": {
       "extends": "base",
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
-        "EXPO_PUBLIC_CONVEX_URL": "${CONVEX_URL}",
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "${STRIPE_PUBLISHABLE_KEY}"
+        "EXPO_PUBLIC_CONVEX_URL": "https://blessed-lapwing-855.convex.cloud",
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51Rs6707fu8h7HUMrrJQ7Ow666NIyxF3Q8kkTu33oE5MeocJgY5ngHp1VIfkJu5DiXe7oU6OF1PthQNZ2ozQRPvwg00T0remwxu",
+        "EXPO_PUBLIC_STRIPE_MONTHLY_PRICE_ID": "price_1Rs6lJ7fu8h7HUMrONoDwGBi",
+        "EXPO_PUBLIC_STRIPE_YEARLY_PRICE_ID": "price_1Rs6mD7fu8h7HUMrfAxJoM2q"
       }
     }
   },
