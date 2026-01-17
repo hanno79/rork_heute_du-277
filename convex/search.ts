@@ -70,7 +70,7 @@ export const checkRateLimit = query({
   args: {
     userId: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<RateLimitResult> => {
     const today = new Date().toISOString().split("T")[0];
 
     const limit = await ctx.db
