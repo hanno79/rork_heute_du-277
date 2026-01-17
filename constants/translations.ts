@@ -1,3 +1,5 @@
+const CURRENT_YEAR = new Date().getFullYear();
+
 export const translations = {
   en: {
     // App Name
@@ -77,8 +79,8 @@ export const translations = {
     language: "Language",
     selectLanguage: "Select your preferred language",
     appVersion: "Heute Du. v1.0",
-    copyright: "© 2025 Heute Du.",
-    
+    copyright: `© ${CURRENT_YEAR} Heute Du.`,
+
     // Premium Screen
     premiumSubscription: "Premium Subscription",
     upgradeTitle: "Upgrade to Premium",
@@ -102,6 +104,7 @@ export const translations = {
     subscriptionActivated: "Premium subscription activated successfully!",
     error: "Error",
     paymentFailed: "Payment failed. Please try again.",
+    planNotFound: "Subscription plan not found.",
     ok: "OK",
     situationBasedSearch: "Situation-Based Search",
     situationBasedSearchDesc: "Find the perfect quote, verse, or saying for any situation in your life",
@@ -138,6 +141,29 @@ export const translations = {
     premiumReactivating: "Reactivating...",
     premiumCancel: "Cancel subscription",
     premiumCanceling: "Canceling...",
+
+    // Payment Dialog
+    paymentConfirmTitle: "Confirm Payment",
+    paymentConfirmMessage: "Do you want to activate the {planName} subscription for {price}€/{interval}?\n\n(This is a test simulation)",
+    paymentCancel: "Cancel",
+    paymentConfirm: "Confirm",
+    intervalYear: "year",
+    intervalMonth: "month",
+
+    // Cancellation Dialog
+    cancelDialogTitle: "Cancel Subscription",
+    cancelDialogMessage: "Do you really want to cancel your Premium subscription?\n\nYour Premium access will remain active until {date}.",
+    cancelDialogKeep: "Keep",
+    cancelDialogConfirm: "Cancel",
+
+    // Development Mode
+    devModeTitle: "Development Mode",
+    devPremiumActivated: "Premium has been activated!",
+    devPremiumActivateFailed: "Premium could not be activated",
+    devActivatePremiumButton: "Activate Premium directly (Test)",
+
+    // Common
+    unknown: "unknown",
 
     // Premium Banner
     unlockPremiumFeatures: "Unlock Premium Features",
@@ -225,17 +251,17 @@ export const translations = {
     
     // Search Screen
     searchQuotes: "Zitate suchen",
-    searchPlaceholder: "Beschreiben Sie Ihre Situation...",
+    searchPlaceholder: "Beschreibe deine Situation...",
     searchButton: "Suchen",
     searchingQuotes: "Suche nach Zitaten...",
     foundQuotes: "{count} passende Zitate gefunden",
-    noQuotesFound: "Keine Zitate gefunden, die zu Ihrer Suche passen.",
-    tryDifferentKeywords: "Versuchen Sie andere Suchbegriffe oder eine allgemeinere Beschreibung.",
+    noQuotesFound: "Keine Zitate gefunden, die zu deiner Suche passen.",
+    tryDifferentKeywords: "Versuch andere Suchbegriffe oder eine allgemeinere Beschreibung.",
     findRightQuote: "Das richtige Zitat finden",
-    describeYourSituation: "Beschreiben Sie Ihre Situation oder Gefühle, und wir finden relevante Zitate, Verse und Sprüche für Sie.",
-    upgradeToSearch: "Upgraden Sie auf Premium, um nach Zitaten zu suchen, die zu Ihrer spezifischen Situation passen.",
+    describeYourSituation: "Beschreibe deine Situation oder Gefühle, und wir finden relevante Zitate, Verse und Sprüche für dich.",
+    upgradeToSearch: "Upgrade auf Premium, um nach Zitaten zu suchen, die zu deiner spezifischen Situation passen.",
     premiumFeature: "Premium-Funktion",
-    upgradeToSearchPremium: "Upgraden Sie auf Premium, um nach Zitaten zu suchen, die zu Ihrer Situation passen.",
+    upgradeToSearchPremium: "Upgrade auf Premium, um nach Zitaten zu suchen, die zu deiner Situation passen.",
     voiceInputPremium: "Spracheingabe ist eine Premium-Funktion",
     voiceInputWouldStart: "Spracheingabe würde hier in einer echten App starten",
     loadMore: "Ähnliche Sprüche",
@@ -258,23 +284,23 @@ export const translations = {
     
     // Favorites
     noFavorites: "Noch keine Favoriten",
-    noFavoritesDescription: "Tippen Sie auf das Herz-Symbol bei einem Zitat, um es zu Ihren Favoriten hinzuzufügen.",
+    noFavoritesDescription: "Tippe auf das Herz-Symbol bei einem Zitat, um es zu deinen Favoriten hinzuzufügen.",
     addedToFavorites: "Zu Favoriten hinzugefügt",
     removedFromFavorites: "Aus Favoriten entfernt",
     loginRequiredForFavorites: "Anmeldung erforderlich",
-    loginRequiredMessage: "Sie müssen angemeldet sein, um Favoriten zu speichern. Möchten Sie sich jetzt anmelden?",
+    loginRequiredMessage: "Du musst angemeldet sein, um Favoriten zu speichern. Möchtest du dich jetzt anmelden?",
     loginButton: "Anmelden",
     cancelButton: "Abbrechen",
     loadingFavorites: "Favoriten werden geladen...",
-    loginToSaveFavorites: "Melden Sie sich an, um Ihre Lieblingszitate zu speichern und geräteübergreifend zu synchronisieren.",
+    loginToSaveFavorites: "Melde dich an, um deine Lieblingszitate zu speichern und geräteübergreifend zu synchronisieren.",
 
     // Profile Screen
-    yourAccount: "Ihr Konto",
+    yourAccount: "Dein Konto",
     premiumStatus: "Premium-Status",
     premiumActive: "Premium aktiv",
     freeVersion: "Kostenlose Version",
-    premiumActiveDescription: "Sie haben Zugang zu allen Premium-Funktionen einschließlich Zitatsuche und Spracheingabe.",
-    freeVersionDescription: "Upgraden Sie auf Premium, um alle Funktionen einschließlich Zitatsuche und Spracheingabe freizuschalten.",
+    premiumActiveDescription: "Du hast Zugang zu allen Premium-Funktionen einschließlich Zitatsuche und Spracheingabe.",
+    freeVersionDescription: "Upgrade auf Premium, um alle Funktionen einschließlich Zitatsuche und Spracheingabe freizuschalten.",
     cancelPremium: "Premium kündigen",
     upgradeToPremium: "Auf Premium upgraden",
     settings: "Einstellungen",
@@ -283,14 +309,14 @@ export const translations = {
     readingHistory: "Lesehistorie",
     shareApp: "App teilen",
     language: "Sprache",
-    selectLanguage: "Wählen Sie Ihre bevorzugte Sprache",
+    selectLanguage: "Wähle deine bevorzugte Sprache",
     appVersion: "Heute Du. v1.0",
-    copyright: "© 2025 Heute Du.",
-    
+    copyright: `© ${CURRENT_YEAR} Heute Du.`,
+
     // Premium Screen
     premiumSubscription: "Premium-Abonnement",
     upgradeTitle: "Auf Premium upgraden",
-    upgradeSubtitle: "Schalten Sie alle Funktionen frei und holen Sie das Beste aus Heute Du. heraus",
+    upgradeSubtitle: "Schalte alle Funktionen frei und hol das Beste aus Heute Du. heraus",
     monthlyPrice: "3,00 €",
     period: "/Monat",
     yearlyPrice: "oder 30,00 €/Jahr (17% sparen)",
@@ -303,22 +329,23 @@ export const translations = {
     year: "Jahr",
     save: "Sparen",
     loginRequired: "Anmeldung erforderlich",
-    loginRequiredForPremium: "Sie müssen sich anmelden, um Premium-Features zu abonnieren.",
+    loginRequiredForPremium: "Du musst dich anmelden, um Premium-Features zu abonnieren.",
     cancel: "Abbrechen",
     login: "Anmelden",
     success: "Erfolg",
     subscriptionActivated: "Premium-Abonnement erfolgreich aktiviert!",
     error: "Fehler",
-    paymentFailed: "Zahlung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    paymentFailed: "Zahlung fehlgeschlagen. Bitte versuch es erneut.",
+    planNotFound: "Abonnement-Plan nicht gefunden.",
     ok: "OK",
     situationBasedSearch: "Situationsbasierte Suche",
-    situationBasedSearchDesc: "Finden Sie das perfekte Zitat, Vers oder Spruch für jede Situation in Ihrem Leben",
+    situationBasedSearchDesc: "Finde das perfekte Zitat, Vers oder Spruch für jede Situation in deinem Leben",
     voiceInput: "Spracheingabe",
-    voiceInputDesc: "Beschreiben Sie Ihre Situation mit Sprache statt zu tippen",
+    voiceInputDesc: "Beschreibe deine Situation mit Sprache statt zu tippen",
     completeQuoteLibrary: "Vollständige Zitat-Bibliothek",
     completeQuoteLibraryDesc: "Zugang zu unserer vollständigen Datenbank mit Zitaten, Versen, Sprüchen und Erklärungen",
     noAds: "Keine Werbung",
-    noAdsDesc: "Genießen Sie eine werbefreie Erfahrung in der gesamten App",
+    noAdsDesc: "Genieße eine werbefreie Erfahrung in der gesamten App",
     freeVersionIncludes: "Kostenlose Version beinhaltet",
     dailyQuoteWithExplanation: "Tägliches Zitat mit Erklärung",
     noSituationBasedSearch: "Keine situationsbasierte Suche",
@@ -347,9 +374,32 @@ export const translations = {
     premiumCancel: "Abo kündigen",
     premiumCanceling: "Wird gekündigt...",
 
+    // Payment Dialog
+    paymentConfirmTitle: "Zahlung bestätigen",
+    paymentConfirmMessage: "Möchtest du das {planName} Abo für {price}€/{interval} aktivieren?\n\n(Dies ist eine Test-Simulation)",
+    paymentCancel: "Abbrechen",
+    paymentConfirm: "Bestätigen",
+    intervalYear: "Jahr",
+    intervalMonth: "Monat",
+
+    // Cancellation Dialog
+    cancelDialogTitle: "Abo kündigen",
+    cancelDialogMessage: "Möchtest du dein Premium-Abo wirklich kündigen?\n\nDein Premium-Zugang bleibt bis zum {date} aktiv.",
+    cancelDialogKeep: "Behalten",
+    cancelDialogConfirm: "Kündigen",
+
+    // Development Mode
+    devModeTitle: "Entwicklungsmodus",
+    devPremiumActivated: "Premium wurde aktiviert!",
+    devPremiumActivateFailed: "Premium konnte nicht aktiviert werden",
+    devActivatePremiumButton: "Premium DIREKT aktivieren (Test)",
+
+    // Common
+    unknown: "unbekannt",
+
     // Premium Banner
     unlockPremiumFeatures: "Premium-Funktionen freischalten",
-    premiumBannerDescription: "Suchen Sie nach Zitaten nach Situation, verwenden Sie Spracheingabe und greifen Sie auf unsere vollständige Bibliothek zu.",
+    premiumBannerDescription: "Suche nach Zitaten nach Situation, verwende Spracheingabe und greife auf unsere vollständige Bibliothek zu.",
     upgrade: "Upgraden",
     
     // Quote Detail
@@ -359,25 +409,25 @@ export const translations = {
     reflectionQuestions: "Zum Nachdenken",
     practicalApplication: "In der Praxis",
     disclaimer: "Wichtiger Hinweis",
-    disclaimerText: "Diese App bietet inspirierende Inhalte zur Reflexion und Motivation. Bei ernsthaften persönlichen, psychischen oder Lebensproblemen wenden Sie sich bitte an qualifizierte Fachkräfte.",
+    disclaimerText: "Diese App bietet inspirierende Inhalte zur Reflexion und Motivation. Bei ernsthaften persönlichen, psychischen oder Lebensproblemen wende dich bitte an qualifizierte Fachkräfte.",
 
     // Disclaimer Page
     disclaimerTitle: "Wichtige Informationen",
-    disclaimerIntro: "Bitte lesen Sie diese wichtigen Informationen über den Zweck und die Grenzen dieser App.",
+    disclaimerIntro: "Bitte lies diese wichtigen Informationen über den Zweck und die Grenzen dieser App.",
     purposeTitle: "Zweck dieser App",
     purposeText: "Heute Du bietet inspirierende Zitate, Bibelverse und Sprüche für tägliche Reflexion, Motivation und spirituelle Führung. Der Inhalt soll Trost, Ermutigung und Denkanstöße bieten.",
     limitationsTitle: "Was diese App NICHT ist",
     limitationsText: "Diese App ist kein Ersatz für professionelle medizinische, psychologische oder therapeutische Behandlung. Der Inhalt sollte nicht zur Diagnose, Behandlung oder Bewältigung von psychischen Erkrankungen oder ernsthaften Lebensproblemen verwendet werden.",
     whenToSeekHelpTitle: "Wann professionelle Hilfe suchen",
-    whenToSeekHelpText: "Bitte wenden Sie sich an qualifizierte Fachkräfte, wenn Sie folgendes erleben:",
+    whenToSeekHelpText: "Bitte wende dich an qualifizierte Fachkräfte, wenn du folgendes erlebst:",
     helpItem1: "Anhaltende Gefühle von Depression, Angst oder Hoffnungslosigkeit",
     helpItem2: "Gedanken an Selbstverletzung oder Suizid",
     helpItem3: "Substanzmissbrauch oder Suchtprobleme",
     helpItem4: "Beziehungsprobleme, Trauma oder größere Lebenskrisen",
     emergencyTitle: "Notfallsituationen",
-    emergencyText: "Wenn Sie sich in unmittelbarer Gefahr befinden oder Suizidgedanken haben, wenden Sie sich bitte sofort an den Notdienst (112) oder eine Krisenhotline.",
-    responsibilityTitle: "Ihre Verantwortung",
-    responsibilityText: "Durch die Nutzung dieser App bestätigen Sie, dass Sie ihre Grenzen verstehen und sich verpflichten, bei Bedarf angemessene professionelle Hilfe zu suchen. Die App-Entwickler sind nicht verantwortlich für Entscheidungen, die auf Basis der bereitgestellten Inhalte getroffen werden.",
+    emergencyText: "Wenn du dich in unmittelbarer Gefahr befindest oder Suizidgedanken hast, wende dich bitte sofort an den Notdienst (112) oder eine Krisenhotline.",
+    responsibilityTitle: "Deine Verantwortung",
+    responsibilityText: "Durch die Nutzung dieser App bestätigst du, dass du ihre Grenzen verstehst und dich verpflichtest, bei Bedarf angemessene professionelle Hilfe zu suchen. Die App-Entwickler sind nicht verantwortlich für Entscheidungen, die auf Basis der bereitgestellten Inhalte getroffen werden.",
     
     // Quote Types
     bibleVerse: "Bibelvers",

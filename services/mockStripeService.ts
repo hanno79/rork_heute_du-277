@@ -1,8 +1,16 @@
 import { SubscriptionPlan } from '@/lib/stripe';
 
+// Machine-readable error codes for payment operations
+export type PaymentErrorCode =
+  | 'PAYMENT_CANCELLED'
+  | 'CANCELLATION_CANCELLED'
+  | 'PAYMENT_FAILED'
+  | 'NETWORK_ERROR';
+
 export interface PaymentResult {
   success: boolean;
   error?: string;
+  code?: PaymentErrorCode; // Machine-readable error code for language-agnostic checks
   subscriptionId?: string;
   customerId?: string;
   cancelAt?: number; // Timestamp when subscription will end after cancellation
@@ -47,7 +55,7 @@ export class MockStripeService {
       onCancel: () => {
         onResult({
           success: false,
-          error: 'Zahlung abgebrochen',
+          code: 'PAYMENT_CANCELLED',
         });
       },
     };
@@ -81,7 +89,7 @@ export class MockStripeService {
       onCancel: () => {
         onResult({
           success: false,
-          error: 'Kündigung abgebrochen',
+          code: 'CANCELLATION_CANCELLED',
         });
       },
     };

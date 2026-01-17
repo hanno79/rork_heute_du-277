@@ -7,6 +7,16 @@ const MAX_SEARCHES_PER_DAY = 10;      // Total searches allowed per day (all typ
 const MAX_AI_SEARCHES_PER_DAY = 10;   // Keep for AI-specific limits if needed
 const MIN_QUOTES_FOR_CACHED_RESULT = 3;
 
+// Type for rate limit response
+interface RateLimitResult {
+  searchCount: number;
+  aiSearchCount: number;
+  maxSearches: number;
+  canSearch: boolean;
+  canUseAI: boolean;
+  remaining: number;
+}
+
 // Internal history periods - quotes can be reused after this period
 const FREE_USER_REUSE_DAYS = 30;      // Free: Quote reusable after 30 days
 const PREMIUM_USER_REUSE_DAYS = 180;  // Premium: Quote reusable after 180 days
@@ -864,15 +874,15 @@ export const performSmartSearch = action({
         categoryId: searchResult.category?._id,
       });
 
-      // Get updated rate limit
-      const updatedRateLimit = await ctx.runQuery(api.search.checkRateLimit, {
+      // Get updated rate limit after AI generation
+      const rateLimitAfterAI: RateLimitResult = await ctx.runQuery(api.search.checkRateLimit, {
         userId: args.userId,
       });
 
       return {
         quotes: aiResult.quotes,
         source: "ai" as const,
-        rateLimit: updatedRateLimit,
+        rateLimit: rateLimitAfterAI,
         wasAIGenerated: true,
         category: searchResult.category,
         contextId: aiResult.contextId,

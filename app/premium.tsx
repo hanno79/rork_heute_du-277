@@ -27,21 +27,21 @@ if (Platform.OS !== 'web' && !isExpoGo) {
     const stripeServiceModule = require('@/services/stripeService');
     useStripeService = stripeServiceModule.useStripeService;
   } catch (error) {
-    // Stripe service not available
+    console.warn('[Premium] Failed to load @/services/stripeService:', error);
   }
 } else if (Platform.OS === 'web') {
   try {
     const stripeWebServiceModule = require('@/services/stripeWebService');
     useStripeWebService = stripeWebServiceModule.useStripeWebService;
   } catch (error) {
-    // Stripe web service not available
+    console.warn('[Premium] Failed to load @/services/stripeWebService:', error);
   }
 }
 
 export default function PremiumScreen() {
   // NOTE: We use Convex as the ONLY source of truth for premium status
   const { setIsPremium } = useSubscription();
-  const { t } = useLanguage();
+  const { t, currentLanguage } = useLanguage();
   const { user, isAuthenticated, tokens } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -99,8 +99,9 @@ export default function PremiumScreen() {
 
   // Format expiry date for display
   const formatExpiryDate = (timestamp: number | undefined) => {
-    if (!timestamp) return 'unbekannt';
-    return new Date(timestamp).toLocaleDateString('de-DE', {
+    if (!timestamp) return t('unknown');
+    const locale = currentLanguage === 'de' ? 'de-DE' : 'en-US';
+    return new Date(timestamp).toLocaleDateString(locale, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -229,7 +230,9 @@ export default function PremiumScreen() {
         '✅'
       );
     } else {
-      if (result.error && result.error !== 'Zahlung abgebrochen') {
+      // Only show error if it's not a user-initiated cancellation
+      // Use machine-readable code for language-agnostic check
+      if (result.code !== 'PAYMENT_CANCELLED' && result.error) {
         showAlert(t('error'), result.error || t('paymentFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
       }
     }
@@ -252,7 +255,7 @@ export default function PremiumScreen() {
 
     const plan = SUBSCRIPTION_PLANS.find(p => p.id === selectedPlan);
     if (!plan) {
-      showAlert(t('error'), 'Plan not found', [{ text: t('ok'), onPress: () => {} }], '❌');
+      showAlert(t('error'), t('planNotFound'), [{ text: t('ok'), onPress: () => {} }], '❌');
       return;
     }
 
@@ -479,11 +482,11 @@ export default function PremiumScreen() {
           {!stripeAvailable && (
             <View style={styles.developmentBanner}>
               <Text style={styles.developmentText}>
-                🧪 Development Mode
+                🧪 {t('devModeTitle')}
               </Text>
               {!actualIsPremium && user?.id && (
                 <TouchableOpacity
-                  style={{ backgroundColor: '#4CAF50', padding: 12, borderRadius: 8, marginTop: 12 }}
+                  style={styles.devPremiumButton}
                   onPress={async () => {
                     try {
                       await updatePremiumStatus({
@@ -493,14 +496,14 @@ export default function PremiumScreen() {
                         stripeSubscriptionStatus: 'active',
                         subscriptionPlan: selectedPlan,
                       });
-                      showAlert('Erfolg', 'Premium wurde aktiviert!', [{ text: 'OK', onPress: () => {} }], '🎉');
+                      showAlert(t('success'), t('devPremiumActivated'), [{ text: t('ok'), onPress: () => {} }], '🎉');
                     } catch (error) {
-                      showAlert('Fehler', 'Premium konnte nicht aktiviert werden', [{ text: 'OK', onPress: () => {} }], '❌');
+                      showAlert(t('error'), t('devPremiumActivateFailed'), [{ text: t('ok'), onPress: () => {} }], '❌');
                     }
                   }}
                 >
-                  <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
-                    🎁 Premium DIREKT aktivieren (Test)
+                  <Text style={styles.devPremiumButtonText}>
+                    🎁 {t('devActivatePremiumButton')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -644,12 +647,15 @@ export default function PremiumScreen() {
       {paymentDialogConfig && (
         <CustomAlert
           visible={showPaymentDialog}
-          title="💳 Zahlung bestätigen"
-          message={`Möchtest du das ${paymentDialogConfig.planName} Abo für ${paymentDialogConfig.price}€/${paymentDialogConfig.interval === 'year' ? 'Jahr' : 'Monat'} aktivieren?\n\n(Dies ist eine Test-Simulation)`}
+          title={`💳 ${t('paymentConfirmTitle')}`}
+          message={t('paymentConfirmMessage')
+            .replace('{planName}', paymentDialogConfig.planName)
+            .replace('{price}', String(paymentDialogConfig.price))
+            .replace('{interval}', paymentDialogConfig.interval === 'year' ? t('intervalYear') : t('intervalMonth'))}
           icon="💳"
           buttons={[
             {
-              text: 'Abbrechen',
+              text: t('paymentCancel'),
               style: 'cancel',
               onPress: () => {
                 paymentDialogConfig.onCancel();
@@ -658,7 +664,7 @@ export default function PremiumScreen() {
               },
             },
             {
-              text: 'Bestätigen',
+              text: t('paymentConfirm'),
               onPress: paymentDialogConfig.onConfirm,
             },
           ]}
@@ -674,12 +680,12 @@ export default function PremiumScreen() {
       {cancelDialogConfig && (
         <CustomAlert
           visible={showCancelDialog}
-          title="🚫 Abo kündigen"
-          message={`Möchtest du dein Premium-Abo wirklich kündigen?\n\nDein Premium-Zugang bleibt bis zum ${cancelDialogConfig.expiryDate} aktiv.`}
+          title={`🚫 ${t('cancelDialogTitle')}`}
+          message={t('cancelDialogMessage').replace('{date}', cancelDialogConfig.expiryDate)}
           icon="🚫"
           buttons={[
             {
-              text: 'Behalten',
+              text: t('cancelDialogKeep'),
               style: 'cancel',
               onPress: () => {
                 cancelDialogConfig.onCancel();
@@ -688,7 +694,7 @@ export default function PremiumScreen() {
               },
             },
             {
-              text: 'Kündigen',
+              text: t('cancelDialogConfirm'),
               style: 'destructive',
               onPress: cancelDialogConfig.onConfirm,
             },
@@ -968,5 +974,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#856404',
     textAlign: 'center',
+  },
+  devPremiumButton: {
+    backgroundColor: '#4CAF50',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  devPremiumButtonText: {
+    color: 'white',
+    textAlign: 'center',
+    fontWeight: 'bold',
   },
 });
