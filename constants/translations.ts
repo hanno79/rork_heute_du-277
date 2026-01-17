@@ -1,4 +1,5 @@
-const CURRENT_YEAR = new Date().getFullYear();
+// Helper function to get current year at runtime (not stale across midnight)
+const getCurrentYear = () => new Date().getFullYear();
 
 export const translations = {
   en: {
@@ -79,7 +80,7 @@ export const translations = {
     language: "Language",
     selectLanguage: "Select your preferred language",
     appVersion: "Heute Du. v1.0",
-    copyright: `© ${CURRENT_YEAR} Heute Du.`,
+    get copyright() { return `© ${getCurrentYear()} Heute Du.`; },
 
     // Premium Screen
     premiumSubscription: "Premium Subscription",
@@ -431,7 +432,7 @@ export const translations = {
     language: "Sprache",
     selectLanguage: "Wähle deine bevorzugte Sprache",
     appVersion: "Heute Du. v1.0",
-    copyright: `© ${CURRENT_YEAR} Heute Du.`,
+    get copyright() { return `© ${getCurrentYear()} Heute Du.`; },
 
     // Premium Screen
     premiumSubscription: "Premium-Abonnement",
